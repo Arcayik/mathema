@@ -1,21 +1,12 @@
 use crate::Span;
-
-type Result<T> = std::result::Result<T, Error>;
-
-#[derive(Debug)]
-pub struct Error {
-    message: String,
-    span: Span
-}
-
-impl Error {
-    pub fn new(message: String, span: Span) -> Self {
-        Error { message, span }
-    }
-}
+use crate::lexer::Cursor;
 
 pub trait Spanned {
     fn span(&self) -> Span;
+}
+
+pub trait Lex {
+    fn lex(cursor: &mut Cursor) -> Self;
 }
 
 macro_rules! impl_spanned {
@@ -27,16 +18,6 @@ macro_rules! impl_spanned {
         }
     }
 }
-
-macro_rules! Token {
-    [+] => { $crate::token::Plus };
-    [-] => { $crate::token::Dash };
-    [*] => { $crate::token::Star };
-    [/] => { $crate::token::Slash };
-}
-pub(crate) use Token;
-
-use crate::lexer::TokenStream;
 
 macro_rules! define_operators {
     ($($token:literal pub struct $name:ident)*) => {
@@ -51,8 +32,14 @@ macro_rules! define_operators {
     };
 }
 
+macro_rules! Token {
+    [+] => { $crate::token::Plus };
+    [-] => { $crate::token::Dash };
+    [*] => { $crate::token::Star };
+    [/] => { $crate::token::Slash };
+}
+
 define_operators! {
-    "="     pub struct Eq
     "-"     pub struct Dash
     "+"     pub struct Plus
     "*"     pub struct Star

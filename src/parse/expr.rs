@@ -4,13 +4,15 @@ use super::{token::*, parser::ParseStream};
 pub enum Expr {
     Value(ExprValue),
     Binary(ExprBinary),
+    Unary(ExprUnary),
 }
 
 impl std::fmt::Debug for Expr {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Self::Value(x) => write!(f, "{:?}", x),
-            Self::Binary(x) => write!(f, "{:?}", x),
+            Self::Value(t) => write!(f, "{:?}", t),
+            Self::Binary(t) => write!(f, "{:?}", t),
+            Self::Unary(t) => write!(f, "{:?}", t),
         }
     }
 }
@@ -27,44 +29,35 @@ impl From<ExprBinary> for Expr {
     }
 }
 
+impl From<ExprUnary> for Expr {
+    fn from(value: ExprUnary) -> Self {
+        Expr::Unary(value)
+    }
+}
+
 impl Spanned for Expr {
     fn span(&self) -> Span {
         match self {
             Self::Value(e) => e.span(),
             Self::Binary(e) => e.span(),
+            Self::Unary(e) => e.span(),
         }
     }
 }
 
 impl Parse for Expr {
     fn parse(input: ParseStream) -> Result<Self, ParseError> {
-        if !input.peek::<Ident>() && !input.peek::<Literal>() {
-            return Err(input.error("Expected ident or literal"))
+        let lhs: Expr = if input.peek::<Ident>() || input.peek::<Literal>() {
+            input.parse::<ExprValue>()?.into()
+        } else if peek_unary_op(input) {
+            input.parse::<ExprUnary>()?.into()
+        } else if peek_binop(input) {
+            input.parse::<ExprBinary>()?.into()
+        } else {
+            return Err(input.error("Expected ident, literal, or unary operator"))
         };
 
-        let lhs: ExprValue = input.parse()?;
-
-        if input.peek::<End>() {
-            Ok(lhs.into())
-        } else if peek_binop(input) {
-            let op: BinOp = input.parse()?;
-            let rhs: ExprValue = input.parse()?;
-
-            let first_expr = ExprBinary {
-                lhs: Box::new(lhs.into()),
-                op,
-                rhs: Box::new(rhs.into()),
-            }.into();
-
-            // for the sake of precedence
-            if peek_binop(input) {
-                Ok(parsing::parse_expr(input, first_expr)?)
-            } else {
-                Ok(first_expr)
-            }
-        } else {
-            Err(input.error("Expected end or binary operator"))
-        }
+        parsing::parse_expr(input, lhs)
     }
 }
 
@@ -185,8 +178,70 @@ fn peek_binop(input: ParseStream) -> bool {
         || input.peek::<Token![/]>()
 }
 
+pub struct ExprUnary {
+    op: UnaryOp,
+    rhs: Box<Expr>,
+}
+
+impl std::fmt::Debug for ExprUnary {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "({:?} {:?})", self.op, self.rhs)
+    }
+}
+
+impl Spanned for ExprUnary {
+    fn span(&self) -> Span {
+        let start = self.op.span().start;
+        let end = self.rhs.span().end;
+        Span { start, end }
+    }
+}
+
+impl Parse for ExprUnary {
+    fn parse(input: ParseStream) -> Result<Self, ParseError> {
+        Ok(ExprUnary {
+            op: input.parse()?,
+            rhs: Box::new(parsing::parse_value_or_unary(input)?.into()),
+        })
+    }
+}
+
+pub enum UnaryOp {
+    Neg(Token![-])
+}
+
+impl std::fmt::Debug for UnaryOp {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Neg(_) => write!(f, "{}", <Token![-]>::display()),
+        }
+    }
+}
+
+impl Spanned for UnaryOp {
+    fn span(&self) -> Span {
+        match self {
+            Self::Neg(t) => t.span(),
+        }
+    }
+}
+
+impl Parse for UnaryOp {
+    fn parse(input: ParseStream) -> Result<Self, ParseError> {
+        if input.peek::<Token![-]>() {
+            input.parse().map(UnaryOp::Neg)
+        } else {
+            Err(input.error("Expected unary operator"))
+        }
+    }
+}
+
+fn peek_unary_op(input: ParseStream) -> bool {
+    input.peek::<Token![-]>()
+}
+
 #[derive(PartialEq, PartialOrd)]
-pub enum Precedence { Sum, Product }
+pub enum Precedence { Sum, Product, Unary, Unambiguous }
 
 impl Precedence {
     pub fn of_binop(op: &BinOp) -> Self {
@@ -195,20 +250,40 @@ impl Precedence {
             BinOp::Mul(_) | BinOp::Div(_) => Precedence::Product
         }
     }
+
+    pub fn of(e: &Expr) -> Self {
+        match e {
+            Expr::Value(_) => Precedence::Unambiguous,
+            Expr::Binary(b) => Precedence::of_binop(&b.op),
+            Expr::Unary(_) => Precedence::Unary,
+        }
+    }
 }
 
 mod parsing {
     use super::*;
 
+    pub fn parse_value_or_unary(input: ParseStream) -> Result<Expr, ParseError> {
+        if peek_unary_op(input) {
+            input.parse().map(Expr::Unary)
+        } else {
+            input.parse().map(Expr::Value)
+        }
+    }
+
     pub fn parse_expr(input: ParseStream, prev: Expr) -> Result<Expr, ParseError> {
+        // println!("parse_expr(): {:#?}", prev);
+
         if input.peek::<End>() {
+            // println!("reached end");
             return Ok(prev)
         } else if !peek_binop(input) {
             return Err(input.error("Expected end or binary operator"))
         }
 
+        // Unary operator not expected here
         let op: BinOp = input.parse()?;
-        let rhs: ExprValue = input.parse()?;
+        let rhs: Expr = parse_value_or_unary(input)?;
 
         match prev {
             Expr::Value(value) => {
@@ -217,6 +292,7 @@ mod parsing {
                     op,
                     rhs: Box::new(rhs.into()),
                 }.into();
+                // println!("match prev => Expr::Value");
                 parse_expr(input, curr_expr)
             },
 
@@ -243,8 +319,21 @@ mod parsing {
                         rhs: Box::new(rhs.into()),
                     }.into();
 
+                    // println!("match prev => Expr::Binary");
                     parse_expr(input, top_expr)
                 }
+            },
+
+            Expr::Unary(expr) => {
+                // TODO: precedence check
+                let new_expr = ExprBinary {
+                    lhs: Box::new(expr.into()),
+                    op,
+                    rhs: Box::new(rhs.into()),
+                }.into();
+
+                // println!("match prev => Expr::Unary");
+                parse_expr(input, new_expr)
             }
         }
     }

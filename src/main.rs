@@ -1,4 +1,5 @@
 mod parse;
+
 use parse::tokenize;
 
 use crate::parse::parse_expr;
@@ -7,9 +8,12 @@ fn main() {
     assert!(parse("1 + 1"));
     assert!(parse("1 + 3 * 5"));
     assert!(parse("1 * 3 + 5"));
-    assert_eq!(parse("1 + 3 * 5 var"), false);
-    assert_eq!(parse("1 3 * 5 var"), false);
+    assert!(!parse("1 + 3 * 5 var"));
+    assert!(!parse("1 3 * 5 var"));
 
+    assert!(parse("1 + -1"));
+    assert!(parse("-4 + -1"));
+    assert!(parse("--4 + -1"));
 }
 
 fn parse(input: &'static str) -> bool {

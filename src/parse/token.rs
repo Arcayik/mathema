@@ -1,5 +1,6 @@
+use crate::parse::parser::ParseError;
+
 use super::parser::ParseStream;
-use super::lexer::{LexToken, TokenKind};
 
 #[derive(Debug, Clone, Copy)]
 pub struct Span {
@@ -12,22 +13,21 @@ pub trait Spanned {
 }
 
 pub trait Parse: Sized {
-    fn parse(input: ParseStream) -> Result<Self, ()>;
+    fn parse(input: ParseStream) -> Result<Self, ParseError>;
 }
 
-pub trait Peek {
+pub trait Token {
     fn peek(input: ParseStream) -> bool;
+    fn display() -> &'static str;
 }
 
 macro_rules! impl_spanned {
-    ($($struct:ident),*) => {
-        $(
-            impl Spanned for $struct {
-                fn span(&self) -> Span {
-                    self.span
-                }
+    ($struct:ident) => {
+        impl Spanned for $struct {
+            fn span(&self) -> Span {
+                self.span
             }
-        )*
+        }
     }
 }
 
@@ -41,24 +41,36 @@ macro_rules! define_punctuation {
 
             impl_spanned!($name);
 
+            impl $name {
+                pub fn from_span(span: Span) -> Self {
+                    Self { span }
+                }
+            }
+
             impl Parse for $name {
-                fn parse(input: ParseStream) -> Result<Self, ()> {
-                    match input.next_token() {
-                        LexToken { kind: TokenKind::$name, span } => {
-                            Ok($name { span: *span })
-                        },
-                        _ => Err(())
+                fn parse(input: ParseStream) -> Result<Self, ParseError> {
+                    if let LexToken::Punct(punct) = input.next_token() {
+                        if punct.repr.to_string() == $token {
+                            Ok(Self { span: punct.span })
+                        } else {
+                            Err(input.error("Expected punct"))
+                        }
+                    } else {
+                        Err(input.error("Not a punct"))
                     }
                 }
             }
 
-            impl Peek for $name {
+            impl Token for $name {
                 fn peek(input: ParseStream) -> bool {
-                    match input.next_token().kind {
-                        TokenKind::$name => true,
-                        _ => false,
+                    if let LexToken::Punct(punct) = input.peek_token() {
+                        punct.repr.to_string() == $token
+                    } else {
+                        false
                     }
                 }
+
+                fn display() -> &'static str { $token }
             }
 
         )*
@@ -67,7 +79,7 @@ macro_rules! define_punctuation {
 
 #[macro_export]
 macro_rules! Token {
-    [=] => { super::token::Eq };
+    [=] => { super::token::Equals };
     [+] => { super::token::Plus };
     [-] => { super::token::Minus };
     [*] => { super::token::Star };
@@ -75,26 +87,108 @@ macro_rules! Token {
 }
 
 define_punctuation! {
-    "="     pub struct Eq
     "+"     pub struct Plus
     "-"     pub struct Minus
     "*"     pub struct Star
     "/"     pub struct Slash
-    "("     pub struct LParen
-    ")"     pub struct RParen
+    "="     pub struct Equals
 }
 
 #[derive(Debug, Clone)]
-pub(super) struct Literal {
-    repr: f64,
-    span: Span,
+pub enum LexToken {
+    Literal(Literal),
+    Ident(Ident),
+    Punct(Punct),
+    End(End)
+}
+
+impl Spanned for LexToken {
+    fn span(&self) -> Span {
+        match self {
+            Self::Literal(literal) => literal.span(),
+            Self::Ident(ident) => ident.span(),
+            Self::Punct(punct) => punct.span(),
+            Self::End(end) => end.span(),
+        }
+    }
 }
 
 #[derive(Debug, Clone)]
-pub(super) struct Ident {
-    repr: String,
-    span: Span,
+pub struct Literal {
+    pub num: f64,
+    pub span: Span,
 }
 
-impl_spanned! { Literal, Ident }
+impl Token for Literal {
+    fn peek<'s>(input: ParseStream) -> bool {
+        match input.peek_token() {
+            LexToken::Literal(_) => true,
+            _ => false
+        }
+    }
 
+    fn display() -> &'static str { "literal" }
+}
+
+impl Parse for Literal {
+    fn parse(input: ParseStream) -> Result<Self, ParseError> {
+        if let LexToken::Literal(literal) = input.next_token() {
+            Ok(literal.clone())
+        } else {
+            Err(input.error("Expected literal"))
+        }
+    }
+}
+
+impl_spanned! { Literal }
+
+#[derive(Debug, Clone)]
+pub struct Ident {
+    pub repr: Box<str>,
+    pub span: Span,
+}
+
+impl Token for Ident {
+    fn peek<'s>(input: ParseStream) -> bool {
+        match input.peek_token() {
+            LexToken::Ident(_) => true,
+            _ => false
+        }
+    }
+
+    fn display() -> &'static str { "ident" }
+}
+
+impl Parse for Ident {
+    fn parse(input: ParseStream) -> Result<Self, ParseError> {
+        if let LexToken::Ident(ident) = input.next_token() {
+            Ok(ident.clone())
+        } else {
+            Err(input.error("Expected ident"))
+        }
+    }
+}
+
+impl_spanned! { Ident }
+
+#[derive(Debug, Clone)]
+pub struct Punct {
+    pub repr: Box<str>,
+    pub span: Span,
+}
+impl_spanned! { Punct }
+
+#[derive(Debug, Clone, Copy)]
+pub struct End {
+    pub span: Span
+}
+
+impl_spanned!{ End }
+
+impl Token for End {
+    fn peek(input: ParseStream) -> bool {
+        input.is_eof()
+    }
+
+    fn display() -> &'static str { "EOF" }
+}

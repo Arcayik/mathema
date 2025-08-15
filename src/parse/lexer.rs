@@ -1,5 +1,15 @@
-use std::num::ParseFloatError;
+use crate::parse::token::{End, LexToken};
+
 use super::token::Span;
+
+#[derive(Debug)]
+pub struct UnknownChar(char, Span);
+
+impl std::fmt::Display for UnknownChar {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "Unknown character: {}", self.0)
+    }
+}
 
 pub struct Lexer<'s> {
     source: &'s str,
@@ -58,6 +68,14 @@ impl<'s> Lexer<'s> {
         }
     }
 
+    pub fn span_char(&self) -> Span {
+        let here = self.current_position();
+        Span {
+            start: here,
+            end: here + 1
+        }
+    }
+
     pub fn eat_while<F: Fn(char) -> bool>(&mut self, f: F) -> &'s str {
         let start = self.pos;
         while let Some(&ch) = self.peek().as_ref() {
@@ -69,54 +87,16 @@ impl<'s> Lexer<'s> {
         }
         &self.source[start..self.pos]
     }
-}
 
-#[derive(Debug, Clone)]
-pub enum TokenKind {
-    Eq,
-    Plus,
-    Minus,
-    Star,
-    Slash,
-    LParen,
-    RParen,
-    Literal(Result<f64, ParseFloatError>),
-    Ident(Box<str>),
-    Unknown(char),
-    End,
-}
-
-#[derive(Debug, Clone)]
-pub struct LexToken {
-    pub kind: TokenKind,
-    pub span: Span,
-}
-
-#[derive(Debug)]
-pub struct TokenBuffer {
-    pub tokens: Box<[LexToken]>,
-}
-
-impl TokenBuffer {
-    pub fn new(tokens: Vec<LexToken>) -> Self {
-        TokenBuffer { tokens: tokens.into_boxed_slice() }
-    }
-
-    pub fn print_all(&self) {
-        let mut first = true;
-        for token in self.tokens.iter() {
-            if !first {
-                print!(", ");
-            }
-            print!("{:?} ({},{})", token.kind, token.span.start, token.span.end);
-            first = false;
-        }
+    pub fn error(&mut self) -> UnknownChar {
+        UnknownChar(self.next().expect("No char"), self.span_char())
     }
 }
 
-pub fn tokenize(input: String) -> TokenBuffer {
-    let mut lexer = Lexer::new(&input);
+pub fn tokenize(input: &str) -> (Box<[LexToken]>, Box<[UnknownChar]>) {
+    let mut lexer = Lexer::new(input);
     let mut tokens: Vec<LexToken> = Vec::new();
+    let mut errors: Vec<UnknownChar> = Vec::new();
 
     while let Some(ch) = lexer.peek() {
         let tok = match ch {
@@ -124,45 +104,49 @@ pub fn tokenize(input: String) -> TokenBuffer {
                 lexer.next();
                 continue;
             },
-            '+' => lex::single_char(&mut lexer, TokenKind::Plus),
-            '-' => lex::single_char(&mut lexer, TokenKind::Minus),
-            '*' => lex::single_char(&mut lexer, TokenKind::Star),
-            '/' => lex::single_char(&mut lexer, TokenKind::Slash),
-            '(' => lex::single_char(&mut lexer, TokenKind::LParen),
-            ')' => lex::single_char(&mut lexer, TokenKind::RParen),
+
+            '+' | '-' | '*' | '/' | '=' => {
+                lex::punct(&mut lexer, ch)
+            },
+
             ch if ch.is_ascii_alphabetic() || ch == '_' => {
                 lex::ident(&mut lexer)
             },
             ch if ch.is_ascii_digit() => {
                 lex::literal(&mut lexer)
             },
-            _ => lex::single_char(&mut lexer, TokenKind::Unknown(ch)),
+            _ => {
+                errors.push(lexer.error());
+                continue;
+            },
         };
         tokens.push(tok);
     }
-    let end_token = LexToken {
-        kind: TokenKind::End,
-        span: Span { start: lexer.current_position(), end: lexer.current_position() }
-    };
-    tokens.push(end_token);
-    return TokenBuffer::new(tokens);
+    tokens.push(LexToken::End(End { span: lexer.span_char() }));
+    (tokens.into_boxed_slice(), errors.into_boxed_slice())
 }
 
 mod lex {
-    use super::{Span, Lexer, LexToken, TokenKind};
+    use crate::parse::token::*;
 
-    pub fn single_char(lexer: &mut Lexer, kind: TokenKind) -> LexToken {
-        let start = lexer.current_position();
-        let span = Span { start, end: start + 1 };
+    use super::{Lexer, LexToken};
+
+    pub fn punct(lexer: &mut Lexer, ch: char) -> LexToken {
+        let start = lexer.mark();
         lexer.next();
-        LexToken { kind, span }
+        let span = lexer.span_from(start);
+        LexToken::Punct(Punct { repr: ch.to_string().into(), span })
+    }
+
+    fn is_ident_char(ch: char) -> bool {
+        ch.is_alphanumeric() || ch == '_'
     }
 
     pub fn ident(lexer: &mut Lexer) -> LexToken {
         let start = lexer.mark();
-        let ident_str = lexer.eat_while(|ch| ch.is_ascii_alphabetic());
+        let ident_str = lexer.eat_while(is_ident_char);
         let span = lexer.span_from(start);
-        LexToken { kind: TokenKind::Ident(ident_str.into()), span }
+        LexToken::Ident(Ident { repr: ident_str.into(), span })
     }
 
     pub fn literal(lexer: &mut Lexer) -> LexToken {
@@ -170,6 +154,6 @@ mod lex {
         let number_str = lexer.eat_while(|ch| ch.is_ascii_digit() || ch == '.');
         let span = lexer.span_from(start);
         let number_result = number_str.parse::<f64>();
-        LexToken { kind: TokenKind::Literal(number_result), span }
+        LexToken::Literal(Literal { num: number_result.unwrap(), span })
     }
 }

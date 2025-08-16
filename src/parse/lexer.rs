@@ -3,7 +3,7 @@ use crate::parse::token::{End, LexToken};
 use super::token::Span;
 
 #[derive(Debug)]
-pub struct UnknownChar(char, Span);
+pub struct UnknownChar(pub char, pub Span);
 
 impl std::fmt::Display for UnknownChar {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {

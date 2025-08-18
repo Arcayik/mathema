@@ -93,7 +93,7 @@ impl<'s> Lexer<'s> {
     }
 }
 
-pub fn tokenize(input: &str) -> (Box<[LexToken]>, Box<[UnknownChar]>) {
+pub fn tokenize(input: &str) -> (Box<[LexToken]>, Vec<UnknownChar>) {
     let mut lexer = Lexer::new(input);
     let mut tokens: Vec<LexToken> = Vec::new();
     let mut errors: Vec<UnknownChar> = Vec::new();
@@ -123,7 +123,7 @@ pub fn tokenize(input: &str) -> (Box<[LexToken]>, Box<[UnknownChar]>) {
         tokens.push(tok);
     }
     tokens.push(LexToken::End(End { span: lexer.span_char() }));
-    (tokens.into_boxed_slice(), errors.into_boxed_slice())
+    (tokens.into_boxed_slice(), errors)
 }
 
 mod lex {

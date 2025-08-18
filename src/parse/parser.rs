@@ -12,8 +12,8 @@ pub struct ParseError {
     span: Span,
 }
 
-impl Into<String> for ParseError {
-    fn into(self) -> String {
+impl ToString for ParseError {
+    fn to_string(&self) -> String {
         format!("{} at ({}..{})", self.msg, self.span.start, self.span.end)
     }
 }
@@ -29,17 +29,6 @@ impl From<UnknownChar> for ParseError {
 impl ParseError {
     pub fn span(&self) -> Span {
         self.span
-    }
-
-    pub fn show_user(&self, offset: usize) {
-        let span = self.span();
-        let start = span.start + offset;
-        let end = span.end + offset;
-        // if is_one_line() { ... }
-        // println!("{}", input);
-        (0..start).for_each(|_| print!(" "));
-        (start..end).for_each(|_| print!("^"));
-        println!("\n{}", self.msg);
     }
 }
 

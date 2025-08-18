@@ -1,6 +1,6 @@
 use crate::Token;
 use super::{
-    token::*,
+    token::{End, Ident, Literal, Parse, Span, Spanned, Token},
     parser::{ParseStream, Result},
 };
 

@@ -4,6 +4,8 @@ use crate::parse::{expr::Expr, lexer::UnknownChar, token::{LexToken, Span, Spann
 
 use super::*;
 
+pub type Result<T> = std::result::Result<T, ParseError>;
+
 #[derive(Debug)]
 pub struct ParseError {
     msg: String,
@@ -39,7 +41,15 @@ impl ParseError {
         (start..end).for_each(|_| print!("^"));
         println!("\n{}", self.msg);
     }
+}
 
+#[derive(Clone, Copy)]
+pub struct ParserPosition(usize);
+
+impl From<usize> for ParserPosition {
+    fn from(value: usize) -> Self {
+        Self(value)
+    }
 }
 
 pub type ParseStream<'p> = &'p ParseBuffer;
@@ -66,7 +76,7 @@ impl ParseBuffer {
         token
     }
 
-    pub fn parse<T: Parse>(&self) -> Result<T, ParseError> {
+    pub fn parse<T: Parse>(&self) -> Result<T> {
         T::parse(&self)
     }
 
@@ -87,6 +97,13 @@ impl ParseBuffer {
         peek
     }
 
+    pub fn save_pos(&self) -> ParserPosition {
+        self.pos.get().into()
+    }
+
+    pub fn restore_pos(&self, pos: ParserPosition) {
+        self.pos.set(pos.0);
+    }
 
     pub fn is_eof(&self) -> bool {
         self.pos.get() == self.src.len() - 1
@@ -98,7 +115,7 @@ impl ParseBuffer {
     }
 }
 
-pub fn parse_expr(src: Box<[LexToken]>) -> Result<Expr, ParseError> {
+pub fn parse_expr(src: Box<[LexToken]>) -> Result<Expr> {
     let parser = ParseBuffer::new(src);
     let expr = parser.parse();
     expr

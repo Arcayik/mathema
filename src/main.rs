@@ -16,20 +16,13 @@ fn main() {
                 println!("{:?}", expr);
             },
             Err(errors) => {
-                errors.iter().for_each(|e| e.show_user(3));
+                errors.iter().for_each(|e| {
+                    println!("{}", input);
+                    e.show_user(0)
+                });
             }
         }
     }
-
-    // assert!(parse_test("1 + 1"));
-    // assert!(parse_test("1 + 3 * 5"));
-    // assert!(parse_test("1 * 3 + 5"));
-    // assert!(!parse_test("1 + 3 * 5 var"));
-    // assert!(!parse_test("1 3 * 5 var"));
-    //
-    // assert!(parse_test("1 + -1"));
-    // assert!(parse_test("-4 + -1"));
-    // assert!(parse_test("--4 + -1"));
 }
 
 pub struct Prompt {
@@ -64,21 +57,39 @@ fn parse_ast<T: ToString>(input: T) -> Result<Expr, Vec<ParseError>> {
     }
 }
 
-fn parse_test(input: &str) -> bool {
-    let input = String::from(input);
-    let (tokens, errors) = tokenize(&input);
-    if !errors.is_empty() {
-        errors.iter().for_each(|e| println!("{e}"));
-        return false;
-    } 
+#[cfg(test)]
+mod tests {
+    use super::*;
 
-    let mut output = true;
+    #[test]
+    fn run_tests() {
+        assert!(parse_test("1 + 1"));
+        assert!(parse_test("1 + 3 * 5"));
+        assert!(parse_test("1 * 3 + 5"));
+        assert!(!parse_test("1 + 3 * 5 var"));
+        assert!(!parse_test("1 3 * 5 var"));
 
-    let ast = parse_expr(tokens);
-    if let Err(ref e) = ast {
-        e.show_user(0);
-        output = false;
+        assert!(parse_test("1 + -1"));
+        assert!(parse_test("-4 + -1"));
+        assert!(parse_test("--4 + -1"));
     }
-    println!("AST: \n{:#?}", ast);
-    output
+
+    fn parse_test(input: &str) -> bool {
+        let input = String::from(input);
+        let (tokens, errors) = tokenize(&input);
+        if !errors.is_empty() {
+            errors.iter().for_each(|e| println!("{e}"));
+            return false;
+        } 
+
+        let mut output = true;
+
+        let ast = parse_expr(tokens);
+        if let Err(ref e) = ast {
+            e.show_user(0);
+            output = false;
+        }
+        println!("AST: \n{:#?}", ast);
+        output
+    }
 }

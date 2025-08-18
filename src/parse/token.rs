@@ -79,11 +79,11 @@ macro_rules! define_punctuation {
 
 #[macro_export]
 macro_rules! Token {
-    [=] => { super::token::Equals };
-    [+] => { super::token::Plus };
-    [-] => { super::token::Minus };
-    [*] => { super::token::Star };
-    [/] => { super::token::Slash };
+    [=] => { $crate::parse::token::Equals };
+    [+] => { $crate::parse::token::Plus };
+    [-] => { $crate::parse::token::Minus };
+    [*] => { $crate::parse::token::Star };
+    [/] => { $crate::parse::token::Slash };
 }
 
 define_punctuation! {

@@ -1,5 +1,8 @@
-use crate::{parse::parser::ParseError, Token};
-use super::{token::*, parser::ParseStream};
+use crate::Token;
+use super::{
+    token::*,
+    parser::{ParseStream, Result},
+};
 
 pub enum Expr {
     Value(ExprValue),
@@ -46,18 +49,10 @@ impl Spanned for Expr {
 }
 
 impl Parse for Expr {
-    fn parse(input: ParseStream) -> Result<Self, ParseError> {
-        let lhs: Expr = if input.peek::<Ident>() || input.peek::<Literal>() {
-            input.parse::<ExprValue>()?.into()
-        } else if peek_unary_op(input) {
-            input.parse::<ExprUnary>()?.into()
-        } else if peek_binop(input) {
-            input.parse::<ExprBinary>()?.into()
-        } else {
-            return Err(input.error("Expected ident, literal, or unary operator"))
-        };
-
-        parsing::parse_expr(input, lhs)
+    fn parse(input: ParseStream) -> Result<Self> {
+        let lhs = parsing::value_or_unary(input)?;
+        // [1] + 2 * 10
+        parsing::parse_expr(input, lhs, Precedence::MIN)
     }
 }
 
@@ -85,7 +80,7 @@ impl Spanned for ExprValue {
 }
 
 impl Parse for ExprValue {
-    fn parse(input: ParseStream) -> Result<Self, ParseError> {
+    fn parse(input: ParseStream) -> Result<Self> {
         if input.peek::<Literal>() {
             input.parse().map(ExprValue::Literal)
         } else if input.peek::<Ident>() {
@@ -97,9 +92,9 @@ impl Parse for ExprValue {
 }
 
 pub struct ExprBinary {
-    lhs: Box<Expr>,
-    op: BinOp,
-    rhs: Box<Expr>,
+    pub(super) lhs: Box<Expr>,
+    pub(super) op: BinOp,
+    pub(super) rhs: Box<Expr>,
 }
 
 impl std::fmt::Debug for ExprBinary {
@@ -117,7 +112,7 @@ impl Spanned for ExprBinary {
 }
 
 impl Parse for ExprBinary {
-    fn parse(input: ParseStream) -> Result<Self, ParseError> {
+    fn parse(input: ParseStream) -> Result<Self> {
         Ok(ExprBinary {
             lhs: Box::new(input.parse()?),
             op: input.parse()?,
@@ -156,7 +151,7 @@ impl Spanned for BinOp {
 }
 
 impl Parse for BinOp {
-    fn parse(input: ParseStream) -> Result<Self, ParseError> {
+    fn parse(input: ParseStream) -> Result<Self> {
         if input.peek::<Token![+]>() {
             input.parse().map(BinOp::Add)
         } else if input.peek::<Token![-]>() {
@@ -179,8 +174,8 @@ fn peek_binop(input: ParseStream) -> bool {
 }
 
 pub struct ExprUnary {
-    op: UnaryOp,
-    rhs: Box<Expr>,
+    pub(super) op: UnaryOp,
+    pub(super) rhs: Box<Expr>,
 }
 
 impl std::fmt::Debug for ExprUnary {
@@ -198,10 +193,10 @@ impl Spanned for ExprUnary {
 }
 
 impl Parse for ExprUnary {
-    fn parse(input: ParseStream) -> Result<Self, ParseError> {
+    fn parse(input: ParseStream) -> Result<Self> {
         Ok(ExprUnary {
             op: input.parse()?,
-            rhs: Box::new(parsing::parse_value_or_unary(input)?.into()),
+            rhs: Box::new(parsing::value_or_unary(input)?.into()),
         })
     }
 }
@@ -227,7 +222,7 @@ impl Spanned for UnaryOp {
 }
 
 impl Parse for UnaryOp {
-    fn parse(input: ParseStream) -> Result<Self, ParseError> {
+    fn parse(input: ParseStream) -> Result<Self> {
         if input.peek::<Token![-]>() {
             input.parse().map(UnaryOp::Neg)
         } else {
@@ -236,14 +231,12 @@ impl Parse for UnaryOp {
     }
 }
 
-fn peek_unary_op(input: ParseStream) -> bool {
-    input.peek::<Token![-]>()
-}
-
 #[derive(PartialEq, PartialOrd)]
-pub enum Precedence { Sum, Product, Unary, Unambiguous }
+pub enum Precedence { Assign, Sum, Product, Unary, Unambiguous }
 
 impl Precedence {
+    pub(super) const MIN: Self = Precedence::Assign;
+
     pub fn of_binop(op: &BinOp) -> Self {
         match op {
             BinOp::Add(_) | BinOp::Sub(_) => Precedence::Sum,
@@ -263,79 +256,82 @@ impl Precedence {
 mod parsing {
     use super::*;
 
-    pub fn parse_value_or_unary(input: ParseStream) -> Result<Expr, ParseError> {
-        if peek_unary_op(input) {
+    pub fn value_or_unary(input: ParseStream) -> Result<Expr> {
+        if input.peek::<Token![-]>() {
             input.parse().map(Expr::Unary)
-        } else {
+        } else if input.peek::<Literal>() || input.peek::<Ident>() {
             input.parse().map(Expr::Value)
+        } else {
+            Err(input.error("Expected ident, literal, or unary operator"))
         }
     }
 
-    pub fn parse_expr(input: ParseStream, prev: Expr) -> Result<Expr, ParseError> {
-        // println!("parse_expr(): {:#?}", prev);
+    pub fn parse_expr(
+        input: ParseStream,
+        mut left: Expr,
+        base: Precedence
+    ) -> Result<Expr> {
+            // [1 + 2 *] 10
+        loop {
+            if input.peek::<End>() {
+                break;
+            }
 
-        if input.peek::<End>() {
-            // println!("reached end");
-            return Ok(prev)
-        } else if !peek_binop(input) {
-            return Err(input.error("Expected end or binary operator"))
-        }
+            let begin = input.save_pos();
 
-        // Unary operator not expected here
-        let op: BinOp = input.parse()?;
-        let rhs: Expr = parse_value_or_unary(input)?;
+            let op = input.parse()?;
+            // [1 +] 2 * 10
+            let precedence = Precedence::of_binop(&op);
 
-        match prev {
-            Expr::Value(value) => {
-                let curr_expr = ExprBinary {
-                    lhs: Box::new(value.into()),
+            if precedence < base {
+                input.restore_pos(begin);
+                break;
+            } else { // ex: {1 / 2} [+ 9] Product:2 > Sum:1
+                left = ExprBinary {
+                    lhs: Box::new(left),
                     op,
-                    rhs: Box::new(rhs.into()),
+                    // [1 +] 2 * 10
+                    rhs: parse_binop_rhs(input, precedence)?,
                 }.into();
-                // println!("match prev => Expr::Value");
-                parse_expr(input, curr_expr)
-            },
-
-            /* 
-             * (1 + 2) [* 3] => L < R => (1 + (2 * 3))
-             * ROTATE: new becomes old's rhs
-             * (1 * 2) [+ 3] => L > R => ((1 * 2) + 3)
-             * old becomes new's lhs
-             */
-            Expr::Binary(mut expr) => {
-                if Precedence::of_binop(&expr.op) < Precedence::of_binop(&op) {
-                    let new_expr = ExprBinary {
-                        lhs: expr.rhs,
-                        op,
-                        rhs: Box::new(rhs.into()),
-                    }.into();
-
-                    expr.rhs = Box::new(new_expr);
-                    parse_expr(input, expr.into())
-                } else {
-                    let top_expr = ExprBinary {
-                        lhs: Box::new(expr.into()),
-                        op,
-                        rhs: Box::new(rhs.into()),
-                    }.into();
-
-                    // println!("match prev => Expr::Binary");
-                    parse_expr(input, top_expr)
-                }
-            },
-
-            Expr::Unary(expr) => {
-                // TODO: precedence check
-                let new_expr = ExprBinary {
-                    lhs: Box::new(expr.into()),
-                    op,
-                    rhs: Box::new(rhs.into()),
-                }.into();
-
-                // println!("match prev => Expr::Unary");
-                parse_expr(input, new_expr)
             }
         }
+        Ok(left)
     }
 
+    fn parse_binop_rhs(
+        input: ParseStream,
+        precedence: Precedence,
+    ) -> Result<Box<Expr>> {
+        let mut rhs = value_or_unary(input)?;
+        // [1 + 2] * 10
+        loop {
+            let begin = input.save_pos();
+            let next = peek_precedence(input);
+            // [1 + 2 *] 10
+
+            if next >= precedence {
+                // [1 + 2 *] 10
+                rhs = parse_expr(input, rhs, next)?;
+            } else {
+                input.restore_pos(begin);
+                break;
+            }
+        }
+        Ok(Box::new(rhs))
+    }
+
+    fn peek_precedence(input: ParseStream) -> Precedence {
+        let begin = input.save_pos();
+
+        let precedence = if let Ok(op) = input.parse() {
+            Precedence::of_binop(&op)
+        } else if input.peek::<Token![=]>() {
+            Precedence::Assign
+        } else {
+            Precedence::MIN
+        };
+
+        input.restore_pos(begin);
+        precedence
+    }
 }

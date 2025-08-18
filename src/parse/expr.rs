@@ -166,13 +166,6 @@ impl Parse for BinOp {
     }
 }
 
-fn peek_binop(input: ParseStream) -> bool {
-    input.peek::<Token![+]>()
-        || input.peek::<Token![-]>()
-        || input.peek::<Token![*]>()
-        || input.peek::<Token![/]>()
-}
-
 pub struct ExprUnary {
     pub(super) op: UnaryOp,
     pub(super) rhs: Box<Expr>,

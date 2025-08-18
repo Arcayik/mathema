@@ -41,12 +41,6 @@ macro_rules! define_punctuation {
 
             impl_spanned!($name);
 
-            impl $name {
-                pub fn from_span(span: Span) -> Self {
-                    Self { span }
-                }
-            }
-
             impl Parse for $name {
                 fn parse(input: ParseStream) -> Result<Self, ParseError> {
                     if let LexToken::Punct(punct) = input.next_token() {

@@ -84,6 +84,7 @@ impl ParseBuffer {
         T::peek(&self)
     }
 
+    #[allow(unused)]
     pub fn peek2<T: Token>(&self) -> bool {
         let old_idx = self.pos.get();
         self.pos.update(|p| p+2);

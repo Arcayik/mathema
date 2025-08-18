@@ -2,7 +2,8 @@ mod parse;
 
 use std::io::Write;
 
-use parse::{tokenize, parse_expr, Expr, ParseError};
+use parse::{tokenize, parse_expr, Expr, ParseError, AstNode};
+use parse::Result as EvalResult;
 
 fn main() {
     let prompt = Prompt::new(">> ".to_string());
@@ -13,7 +14,7 @@ fn main() {
         let ast = parse_ast(&input);
         match ast {
             Ok(expr) => {
-                println!("{:?}", expr);
+                handle_eval(expr.eval());
             },
             Err(errors) => {
                 errors.iter().for_each(|e| {
@@ -54,6 +55,13 @@ fn parse_ast<T: ToString>(input: T) -> Result<Expr, Vec<ParseError>> {
         Err(errors.into_iter().map(|le| ParseError::from(le)).collect::<Vec<_>>())
     } else {
         parse_expr(tokens).map_err(|e| vec![e])
+    }
+}
+
+fn handle_eval(result: EvalResult<f64>) {
+    match result {
+        Ok(num) => println!("{}", num),
+        Err(e) => println!("{}", e.to_string()),
     }
 }
 

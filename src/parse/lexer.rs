@@ -89,7 +89,8 @@ impl<'s> Lexer<'s> {
     }
 
     pub fn error(&mut self) -> UnknownChar {
-        UnknownChar(self.next().expect("No char"), self.span_char())
+        let span = self.span_char();
+        UnknownChar(self.next().expect("No char"), span)
     }
 }
 

@@ -3,8 +3,37 @@ mod diagnostic;
 
 use std::io::Write;
 
-use parse::{tokenize, parse_expr, Expr, AstNode};
+use parse::{tokenize, parse_stmt, Stmt, AstNode};
 use diagnostic::Diagnostic;
+
+use crate::context::Context;
+
+mod context {
+    use std::{collections::HashMap, f64::consts::{E, PI}};
+
+    pub struct Context {
+        variables: HashMap<Box<str>, f64>,
+    }
+
+    impl Default for Context {
+        fn default() -> Self {
+            let mut variables = HashMap::new();
+            variables.insert("pi".into(), PI);
+            variables.insert("e".into(), E);
+            Context { variables }
+        }
+    }
+    
+    impl Context {
+        pub fn get_variable(&self, name: Box<str>) -> Option<f64> {
+            self.variables.get(&name).copied()
+        }
+
+        pub fn set_variable(&mut self, name: Box<str>, value: f64) {
+            self.variables.insert(name, value);
+        }
+    }
+}
 
 pub struct Prompt {
     prefix: String,
@@ -28,15 +57,22 @@ impl Prompt {
     }
 
     pub fn show_diagnostic(&self, diagnostic: &Diagnostic) {
-        diagnostic.highlight_span(3);
+        diagnostic.highlight_span(self.prefix.len());
         println!("{}", diagnostic);
+    }
+
+    pub fn show_answer(&self, answer: f64) {
+        println!("{}", answer);
     }
 }
 
 fn main() {
+    let mut context = Context::default();
     let prompt = Prompt::new(">> ".to_string());
+
     loop {
         let input = prompt.get_line();
+        if input.is_empty() { continue }
         if input == "exit" { break }
 
         let ast = parse_ast(&input);
@@ -44,25 +80,41 @@ fn main() {
             errors.iter().for_each(|d| prompt.show_diagnostic(d));
             continue;
         }
-        let expr = ast.unwrap();
+        let stmt = ast.unwrap();
 
-        let eval_result = expr.eval();
-        if let Err(e) = eval_result {
-            prompt.show_diagnostic(&e.into());
-            continue;
-        };
-        let answer = eval_result.unwrap();
-        println!("{}", answer);
+        let process_result = process_statement(&mut context, stmt);
+        match process_result {
+            Ok(ans) => prompt.show_answer(ans),
+            Err(diags) => diags.iter().for_each(|d| prompt.show_diagnostic(d)),
+        }
     }
 }
 
-fn parse_ast<T: ToString>(input: T) -> Result<Expr, Vec<Diagnostic>> {
+fn parse_ast<T: ToString>(input: T) -> Result<Stmt, Vec<Diagnostic>> {
     let input = input.to_string();
     let (tokens, errors) = tokenize(&input);
     if !errors.is_empty() {
         Err(Diagnostic::from_vec(errors))
     } else {
-        parse_expr(tokens).map_err(|e| vec![e.into()])
+        parse_stmt(tokens).map_err(|e| vec![e.into()])
+    }
+}
+
+fn process_statement(ctxt: &mut Context, stmt: Stmt) -> Result<f64, Vec<Diagnostic>> {
+    match stmt {
+        Stmt::Expr(expr) => {
+            expr.eval(ctxt).map_err(|e| vec![e.into()])
+        },
+        Stmt::VarDecl(decl) => {
+            let name = decl.var_name.repr;
+            match decl.expr.eval(ctxt) {
+                Ok(ans) => {
+                    ctxt.set_variable(name, ans);
+                    Ok(ans)
+                }
+                Err(e) => Err(vec![e.into()])
+            }
+        }
     }
 }
 
@@ -99,7 +151,7 @@ mod tests {
             return false;
         } 
 
-        let ast = parse_expr(tokens);
+        let ast = parse_stmt(tokens);
         println!("AST: \n{:#?}", ast);
         ast.is_ok()
     }

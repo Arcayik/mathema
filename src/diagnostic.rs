@@ -31,10 +31,13 @@ impl From<ParseError> for Diagnostic {
 
 impl From<EvalError> for Diagnostic {
     fn from(value: EvalError) -> Self {
-        Diagnostic {
-            msg: value.to_string(),
-            spans: Vec::new(),
-        }
+        let msg = value.to_string();
+        let spans = value.undefined
+            .into_iter()
+            .map(|ident| ident.span)
+            .collect();
+
+        Diagnostic { msg, spans }
     }
 }
 
@@ -54,5 +57,6 @@ impl Diagnostic {
 
             last_end = end;
         }
+        println!();
     }
 }

@@ -1,6 +1,6 @@
 use std::cell::Cell;
 
-use crate::parse::{expr::Expr, lexer::UnknownChar, token::{LexToken, Span, Spanned}};
+use crate::parse::{lexer::UnknownChar, stmt::Stmt, token::{LexToken, Span, Spanned}};
 
 use super::*;
 
@@ -12,9 +12,9 @@ pub struct ParseError {
     span: Span,
 }
 
-impl ToString for ParseError {
-    fn to_string(&self) -> String {
-        format!("{} at ({}..{})", self.msg, self.span.start, self.span.end)
+impl std::fmt::Display for ParseError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.msg)
     }
 }
 
@@ -66,25 +66,19 @@ impl ParseBuffer {
     }
 
     pub fn parse<T: Parse>(&self) -> Result<T> {
-        T::parse(&self)
+        T::parse(self)
     }
 
     pub fn peek<T: Token>(&self) -> bool {
-        T::peek(&self)
+        T::peek(self)
     }
 
-    #[allow(unused)]
     pub fn peek2<T: Token>(&self) -> bool {
         let old_idx = self.pos.get();
-        self.pos.update(|p| p+2);
-
-        let mut peek = false;
-        if !self.is_eof() {
-            peek = T::peek(&self);
-        }
+        self.next_token();
+        let found = self.peek::<T>();
         self.pos.set(old_idx);
-
-        peek
+        found
     }
 
     pub fn save_pos(&self) -> ParserPosition {
@@ -105,8 +99,7 @@ impl ParseBuffer {
     }
 }
 
-pub fn parse_expr(src: Box<[LexToken]>) -> Result<Expr> {
+pub fn parse_stmt(src: Box<[LexToken]>) -> Result<Stmt> {
     let parser = ParseBuffer::new(src);
-    let expr = parser.parse();
-    expr
+    parser.parse()
 }

@@ -51,7 +51,6 @@ impl Spanned for Expr {
 impl Parse for Expr {
     fn parse(input: ParseStream) -> Result<Self> {
         let lhs = parsing::value_or_unary(input)?;
-        // [1] + 2 * 10
         parsing::parse_expr(input, lhs, Precedence::MIN)
     }
 }
@@ -168,19 +167,19 @@ impl Parse for BinOp {
 
 pub struct ExprUnary {
     pub(super) op: UnaryOp,
-    pub(super) rhs: Box<Expr>,
+    pub(super) expr: Box<Expr>,
 }
 
 impl std::fmt::Debug for ExprUnary {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "({:?} {:?})", self.op, self.rhs)
+        write!(f, "({:?} {:?})", self.op, self.expr)
     }
 }
 
 impl Spanned for ExprUnary {
     fn span(&self) -> Span {
         let start = self.op.span().start;
-        let end = self.rhs.span().end;
+        let end = self.expr.span().end;
         Span { start, end }
     }
 }
@@ -189,7 +188,7 @@ impl Parse for ExprUnary {
     fn parse(input: ParseStream) -> Result<Self> {
         Ok(ExprUnary {
             op: input.parse()?,
-            rhs: Box::new(parsing::value_or_unary(input)?.into()),
+            expr: Box::new(parsing::value_or_unary(input)?),
         })
     }
 }

@@ -263,7 +263,6 @@ mod parsing {
         mut left: Expr,
         base: Precedence
     ) -> Result<Expr> {
-            // [1 + 2 *] 10
         loop {
             if input.peek::<End>() {
                 break;
@@ -272,17 +271,15 @@ mod parsing {
             let begin = input.save_pos();
 
             let op = input.parse()?;
-            // [1 +] 2 * 10
             let precedence = Precedence::of_binop(&op);
 
             if precedence < base {
                 input.restore_pos(begin);
                 break;
-            } else { // ex: {1 / 2} [+ 9] Product:2 > Sum:1
+            } else {
                 left = ExprBinary {
                     lhs: Box::new(left),
                     op,
-                    // [1 +] 2 * 10
                     rhs: parse_binop_rhs(input, precedence)?,
                 }.into();
             }
@@ -295,14 +292,11 @@ mod parsing {
         precedence: Precedence,
     ) -> Result<Box<Expr>> {
         let mut rhs = value_or_unary(input)?;
-        // [1 + 2] * 10
         loop {
             let begin = input.save_pos();
             let next = peek_precedence(input);
-            // [1 + 2 *] 10
 
-            if next >= precedence {
-                // [1 + 2 *] 10
+            if next > precedence {
                 rhs = parse_expr(input, rhs, next)?;
             } else {
                 input.restore_pos(begin);

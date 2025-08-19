@@ -1,8 +1,9 @@
-use crate::{context::Context, parse::{expr::*, token::Ident}};
+use crate::{context::Context, parse::{expr::*, token::{Ident, Span}}};
 
 #[derive(Debug)]
 pub struct EvalError {
-    pub undefined: Vec<Ident>
+    pub undefined: Vec<Box<str>>,
+    pub spans: Vec<Span>,
 }
 
 impl std::fmt::Display for EvalError {
@@ -11,7 +12,7 @@ impl std::fmt::Display for EvalError {
             if self.undefined.len() > 1 { "s" } else { "" },
             self.undefined
             .iter()
-            .map(|ident| ident.repr.clone())
+            .map(|ident| ident.clone())
             .collect::<Vec<_>>()
             .join(", "),
         )
@@ -20,15 +21,21 @@ impl std::fmt::Display for EvalError {
 
 impl EvalError {
     fn new(ident: Ident) -> Self {
-        EvalError {
-            undefined: vec![ident]
-        }
+        let name = ident.repr;
+        let span = ident.span;
+        let undefined = vec![name];
+        EvalError { undefined, spans: vec![span] }
     }
 
     fn combine(left: Result<f64>, right: Result<f64>) -> Option<Self> {
         match (left, right) {
             (Err(mut l), Err(mut r)) => {
-                l.undefined.append(&mut r.undefined);
+                for name in r.undefined.drain(..) {
+                    if !l.undefined.contains(&name) {
+                        l.undefined.push(name);
+                    }
+                }
+                l.spans.append(&mut r.spans);
                 Some(l)
             },
             (Err(e), _) | (_, Err(e)) => Some(e),

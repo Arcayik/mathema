@@ -1,13 +1,34 @@
-use crate::parse::token::{End, LexToken};
+use crate::parse::token::{End, LexToken, Spanned};
 
 use super::token::Span;
 
-#[derive(Debug)]
-pub struct UnknownChar(pub char, pub Span);
+#[derive(Clone, Debug)]
+pub enum LexError {
+    UnknownChar(char, Span),
+    NumParseError(Span),
+    UnclosedDelim(Span),
+    TrailingDelim(Span)
+}
 
-impl std::fmt::Display for UnknownChar {
+impl std::fmt::Display for LexError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "Unknown character: {}", self.0)
+        match self {
+            Self::UnknownChar(ch, _) => write!(f, "Unknown character: {}", ch),
+            Self::NumParseError(_) => write!(f, "Number parse error"),
+            Self::UnclosedDelim(_) => write!(f, "Unclosed delimiter"),
+            Self::TrailingDelim(_) => write!(f, "Trailing delimiter"),
+        }
+    }
+}
+
+impl Spanned for LexError {
+    fn span(&self) -> Span {
+        match self {
+            Self::UnknownChar(_, span) => *span,
+            Self::NumParseError(span) => *span,
+            Self::UnclosedDelim(span) => *span,
+            Self::TrailingDelim(span) => *span
+        }
     }
 }
 
@@ -16,6 +37,7 @@ pub struct Lexer<'s> {
     input: std::str::Chars::<'s>,
     peeked: Option<(char, usize)>,
     pos: usize,
+    errors: Vec<LexError>
 }
 
 impl<'s> Lexer<'s> {
@@ -24,7 +46,8 @@ impl<'s> Lexer<'s> {
             source,
             input: source.chars(),
             peeked: None,
-            pos: 0
+            pos: 0,
+            errors: Vec::new()
         }
     }
 
@@ -88,16 +111,42 @@ impl<'s> Lexer<'s> {
         &self.source[start..self.pos]
     }
 
-    pub fn error(&mut self) -> UnknownChar {
+    pub fn is_eof(&mut self) -> bool {
+        self.peek().is_none()
+    }
+
+    pub fn unknown_char(&mut self) {
         let span = self.span_char();
-        UnknownChar(self.next().expect("No char"), span)
+        let error = LexError::UnknownChar(self.next().expect("No char"), span);
+        self.errors.push(error);
+    }
+
+    pub fn num_parse_error(&mut self) {
+        let span = self.span_char();
+        let error = LexError::NumParseError(span);
+        self.errors.push(error);
+    }
+
+    pub fn unclosed_delim(&mut self) {
+        let span = self.span_char();
+        let error = LexError::UnclosedDelim(span);
+        self.errors.push(error);
+    }
+
+    pub fn trailing_delim(&mut self) {
+        let span = self.span_char();
+        let error = LexError::TrailingDelim(span);
+        self.errors.push(error);
+    }
+
+    pub fn all_errors(&self) -> &[LexError] {
+        &self.errors
     }
 }
 
-pub fn tokenize(input: &str) -> (Box<[LexToken]>, Vec<UnknownChar>) {
+pub fn tokenize(input: &str) -> (Box<[LexToken]>, Vec<LexError>) {
     let mut lexer = Lexer::new(input);
     let mut tokens: Vec<LexToken> = Vec::new();
-    let mut errors: Vec<UnknownChar> = Vec::new();
 
     while let Some(ch) = lexer.peek() {
         let tok = match ch {
@@ -117,14 +166,13 @@ pub fn tokenize(input: &str) -> (Box<[LexToken]>, Vec<UnknownChar>) {
                 lex::literal(&mut lexer)
             },
             _ => {
-                errors.push(lexer.error());
+                lexer.unknown_char();
                 continue;
             },
         };
         tokens.push(tok);
     }
-    tokens.push(LexToken::End(End { span: lexer.span_char() }));
-    (tokens.into_boxed_slice(), errors)
+    (tokens.into_boxed_slice(), lexer.all_errors().to_vec())
 }
 
 mod lex {

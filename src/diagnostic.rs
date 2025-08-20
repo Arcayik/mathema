@@ -1,4 +1,4 @@
-use crate::parse::{EvalError, ParseError, Span, UnknownChar};
+use crate::parse::{EvalError, ParseError, Span, Spanned, LexError};
 
 #[derive(Debug)]
 pub struct Diagnostic {
@@ -12,11 +12,11 @@ impl std::fmt::Display for Diagnostic {
     }
 }
 
-impl From<UnknownChar> for Diagnostic {
-    fn from(value: UnknownChar) -> Self {
+impl From<LexError> for Diagnostic {
+    fn from(value: LexError) -> Self {
         Diagnostic {
             msg: value.to_string(),
-            spans: vec![value.1]
+            spans: vec![value.span()]
         }
     }
 }

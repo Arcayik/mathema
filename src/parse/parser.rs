@@ -1,6 +1,6 @@
 use std::cell::Cell;
 
-use crate::parse::{lexer::UnknownChar, stmt::Stmt, token::{LexToken, Span, Spanned}};
+use crate::parse::{lexer::LexError, stmt::Stmt, token::{LexToken, Span, Spanned}};
 
 use super::*;
 
@@ -15,14 +15,6 @@ pub struct ParseError {
 impl std::fmt::Display for ParseError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "{}", self.msg)
-    }
-}
-
-impl From<UnknownChar> for ParseError {
-    fn from(value: UnknownChar) -> Self {
-        let msg = format!("Unknown character: '{}'", value.0);
-        let span = value.1;
-        ParseError { msg, span }
     }
 }
 
@@ -93,8 +85,22 @@ impl ParseBuffer {
         self.pos.get() == self.src.len() - 1
     }
 
+    fn find_span(&self, token: &LexToken) -> Span {
+        match token {
+            LexToken::Literal(literal) => literal.span(),
+            LexToken::Ident(ident) => ident.span(),
+            LexToken::Punct(punct) => punct.span(),
+            LexToken::Group(group, _) => group.span(),
+            LexToken::End(offset) => {
+                let group_pos = self.pos.get() - offset.abs() as usize;
+                let group = &self.src[group_pos];
+                self.find_span(group)
+            },
+        }
+    }
+
     pub fn error(&self, msg: &'static str) -> ParseError {
-        let span = self.peek_token().span();
+        let span = self.find_span(self.peek_token());
         ParseError { msg: msg.to_string(), span }
     }
 }

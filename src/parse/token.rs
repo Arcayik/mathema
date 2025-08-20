@@ -93,18 +93,8 @@ pub enum LexToken {
     Literal(Literal),
     Ident(Ident),
     Punct(Punct),
-    End(End)
-}
-
-impl Spanned for LexToken {
-    fn span(&self) -> Span {
-        match self {
-            Self::Literal(literal) => literal.span(),
-            Self::Ident(ident) => ident.span(),
-            Self::Punct(punct) => punct.span(),
-            Self::End(end) => end.span(),
-        }
-    }
+    Group(Group, usize),
+    End(isize)
 }
 
 #[derive(Debug, Clone)]
@@ -170,19 +160,34 @@ pub struct Punct {
     pub repr: Box<str>,
     pub span: Span,
 }
+
 impl_spanned! { Punct }
 
-#[derive(Debug, Clone, Copy)]
-pub struct End {
+#[derive(Debug, Clone)]
+pub enum Delimiter {
+    /// { ... }
+    Parenthesis,
+    /// { ... }
+    Brace,
+    /// \[ ... \]
+    Bracket,
+}
+
+#[derive(Debug, Clone)]
+pub struct Group {
+    pub delim: Delimiter,
     pub span: Span
 }
 
-impl_spanned!{ End }
+impl_spanned! { Group }
+
+#[derive(Debug, Clone)]
+pub struct End;
 
 impl Token for End {
     fn peek(input: ParseStream) -> bool {
         input.is_eof()
     }
 
-    fn display() -> &'static str { "EOF" }
+    fn display() -> &'static str { "End" }
 }

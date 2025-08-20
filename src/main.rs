@@ -152,6 +152,7 @@ mod tests {
         } 
 
         let ast = parse_stmt(tokens);
+        println!("Input: [{}]", input);
         println!("AST: \n{:#?}", ast);
         ast.is_ok()
     }

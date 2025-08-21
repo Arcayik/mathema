@@ -10,11 +10,7 @@ impl std::fmt::Display for EvalError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "Undefined variable{}: {}",
             if self.undefined.len() > 1 { "s" } else { "" },
-            self.undefined
-            .iter()
-            .map(|ident| ident.clone())
-            .collect::<Vec<_>>()
-            .join(", "),
+            self.undefined.join(", "),
         )
     }
 }
@@ -56,6 +52,7 @@ impl AstNode for Expr {
             Self::Value(value) => value.eval(ctxt),
             Self::Binary(expr) => expr.eval(ctxt),
             Self::Unary(expr) => expr.eval(ctxt),
+            Self::Group(group) => group.eval(ctxt)
         }
     }
 }
@@ -103,5 +100,11 @@ impl AstNode for ExprUnary {
         } else {
             right
         }
+    }
+}
+
+impl AstNode for ExprGroup {
+    fn eval(&self, ctxt: &Context) -> Result<f64> {
+        self.expr.eval(ctxt)
     }
 }

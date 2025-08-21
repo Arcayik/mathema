@@ -1,6 +1,6 @@
 use std::cell::Cell;
 
-use crate::parse::{lexer::LexError, stmt::Stmt, token::{LexToken, Span, Spanned}};
+use crate::parse::{stmt::Stmt, token::{LexToken, Span, Spanned}};
 
 use super::*;
 
@@ -90,9 +90,9 @@ impl ParseBuffer {
             LexToken::Literal(literal) => literal.span(),
             LexToken::Ident(ident) => ident.span(),
             LexToken::Punct(punct) => punct.span(),
-            LexToken::Group(group, _) => group.span(),
+            LexToken::Group(group) => group.span(),
             LexToken::End(offset) => {
-                let group_pos = self.pos.get() - offset.abs() as usize;
+                let group_pos = self.pos.get() - offset.unsigned_abs();
                 let group = &self.src[group_pos];
                 self.find_span(group)
             },

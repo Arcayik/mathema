@@ -71,6 +71,26 @@ macro_rules! define_punctuation {
     };
 }
 
+macro_rules! define_delimiters {
+    ($($variant:ident pub struct $name:ident $string:literal)*) => {
+        $(
+            #[allow(unused)]
+            pub struct $name;
+
+            impl Token for $name {
+                fn peek<'s>(input: ParseStream) -> bool {
+                    match input.peek_token() {
+                        LexToken::Group(g) => matches!(g.delim, Delimiter::$variant),
+                        _ => false
+                    }
+                }
+
+                fn display() -> &'static str { "paren" }
+            }
+        )*
+    };
+}
+
 #[macro_export]
 macro_rules! Token {
     [=] => { $crate::parse::token::Equals };
@@ -88,12 +108,18 @@ define_punctuation! {
     "="     pub struct Equals
 }
 
+define_delimiters! {
+    Parenthesis pub struct Paren    "paren"
+    Brace       pub struct Brace    "brace"
+    Bracket     pub struct Bracket  "bracket"
+}
+
 #[derive(Debug, Clone)]
 pub enum LexToken {
     Literal(Literal),
     Ident(Ident),
     Punct(Punct),
-    Group(Group, usize),
+    Group(Group),
     End(isize)
 }
 
@@ -105,10 +131,7 @@ pub struct Literal {
 
 impl Token for Literal {
     fn peek<'s>(input: ParseStream) -> bool {
-        match input.peek_token() {
-            LexToken::Literal(_) => true,
-            _ => false
-        }
+        matches!(input.peek_token(), LexToken::Literal(_))
     }
 
     fn display() -> &'static str { "literal" }
@@ -134,10 +157,7 @@ pub struct Ident {
 
 impl Token for Ident {
     fn peek<'s>(input: ParseStream) -> bool {
-        match input.peek_token() {
-            LexToken::Ident(_) => true,
-            _ => false
-        }
+        matches!(input.peek_token(), LexToken::Ident(_))
     }
 
     fn display() -> &'static str { "ident" }
@@ -163,7 +183,7 @@ pub struct Punct {
 
 impl_spanned! { Punct }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Copy, PartialEq)]
 pub enum Delimiter {
     /// { ... }
     Parenthesis,
@@ -186,8 +206,8 @@ pub struct End;
 
 impl Token for End {
     fn peek(input: ParseStream) -> bool {
-        input.is_eof()
+        matches!(input.peek_token(), LexToken::End(..))
     }
 
-    fn display() -> &'static str { "End" }
+    fn display() -> &'static str { "end" }
 }

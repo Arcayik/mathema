@@ -1,4 +1,4 @@
-use crate::Token;
+use crate::{parse::{token::{Delimiter, LexToken}}, Token};
 use super::{
     token::{End, Ident, Literal, Parse, Span, Spanned, Token},
     parser::{ParseStream, Result},
@@ -8,6 +8,7 @@ pub enum Expr {
     Value(ExprValue),
     Binary(ExprBinary),
     Unary(ExprUnary),
+    Group(ExprGroup),
 }
 
 impl std::fmt::Debug for Expr {
@@ -16,6 +17,7 @@ impl std::fmt::Debug for Expr {
             Self::Value(t) => write!(f, "{:?}", t),
             Self::Binary(t) => write!(f, "{:?}", t),
             Self::Unary(t) => write!(f, "{:?}", t),
+            Self::Group(t) => write!(f, "{:?}", t)
         }
     }
 }
@@ -38,19 +40,26 @@ impl From<ExprUnary> for Expr {
     }
 }
 
+impl From<ExprGroup> for Expr {
+    fn from(value: ExprGroup) -> Self {
+        Expr::Group(value)
+    }
+}
+
 impl Spanned for Expr {
     fn span(&self) -> Span {
         match self {
             Self::Value(e) => e.span(),
             Self::Binary(e) => e.span(),
             Self::Unary(e) => e.span(),
+            Self::Group(e) => e.span()
         }
     }
 }
 
 impl Parse for Expr {
     fn parse(input: ParseStream) -> Result<Self> {
-        let lhs = parsing::value_or_unary(input)?;
+        let lhs = parsing::value_or_unary_or_parens(input)?;
         parsing::parse_expr(input, lhs, Precedence::MIN)
     }
 }
@@ -188,7 +197,7 @@ impl Parse for ExprUnary {
     fn parse(input: ParseStream) -> Result<Self> {
         Ok(ExprUnary {
             op: input.parse()?,
-            expr: Box::new(parsing::value_or_unary(input)?),
+            expr: Box::new(parsing::value_or_unary_or_parens(input)?),
         })
     }
 }
@@ -223,6 +232,36 @@ impl Parse for UnaryOp {
     }
 }
 
+pub struct ExprGroup {
+    pub(super) delim: Delimiter,
+    pub(super) expr: Box<Expr>,
+}
+
+impl std::fmt::Debug for ExprGroup {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "({:?} {:?})", self.delim, self.expr)
+    }
+}
+
+impl Spanned for ExprGroup {
+    fn span(&self) -> Span {
+        self.expr.span()
+    }
+}
+
+impl Parse for ExprGroup {
+    fn parse(input: ParseStream) -> Result<Self> {
+        if let LexToken::Group(g) = input.next_token() {
+            Ok(ExprGroup {
+                delim: g.delim,
+                expr: Box::new(input.parse()?)
+            })
+        } else {
+            Err(input.error("Expected group"))
+        }
+    }
+}
+
 #[derive(PartialEq, PartialOrd)]
 pub enum Precedence { Assign, Sum, Product, Unary, Unambiguous }
 
@@ -241,20 +280,25 @@ impl Precedence {
             Expr::Value(_) => Precedence::Unambiguous,
             Expr::Binary(b) => Precedence::of_binop(&b.op),
             Expr::Unary(_) => Precedence::Unary,
+            Expr::Group(_) => Precedence::Unambiguous,
         }
     }
 }
 
 mod parsing {
+    use crate::parse::token::Paren;
+
     use super::*;
 
-    pub fn value_or_unary(input: ParseStream) -> Result<Expr> {
+    pub fn value_or_unary_or_parens(input: ParseStream) -> Result<Expr> {
         if input.peek::<Token![-]>() {
             input.parse().map(Expr::Unary)
         } else if input.peek::<Literal>() || input.peek::<Ident>() {
             input.parse().map(Expr::Value)
+        } else if input.peek::<Paren>() {
+            input.parse().map(Expr::Group)
         } else {
-            Err(input.error("Expected ident, literal, or unary operator"))
+            Err(input.error("Expected ident, literal, parens, unary operator"))
         }
     }
 
@@ -265,6 +309,7 @@ mod parsing {
     ) -> Result<Expr> {
         loop {
             if input.peek::<End>() {
+                input.next_token();
                 break;
             }
 
@@ -291,7 +336,7 @@ mod parsing {
         input: ParseStream,
         precedence: Precedence,
     ) -> Result<Box<Expr>> {
-        let mut rhs = value_or_unary(input)?;
+        let mut rhs = value_or_unary_or_parens(input)?;
         loop {
             let begin = input.save_pos();
             let next = peek_precedence(input);

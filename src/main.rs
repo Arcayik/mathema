@@ -133,6 +133,7 @@ mod tests {
     fn unexpected_and_trailing() {
         assert!(!parse_test("1 + +"));
         assert!(!parse_test("1 + 3 * 5 var"));
+        assert!(!parse_test("1 / 3 x y"));
         assert!(!parse_test("1 3 * 5 var"));
     }
 
@@ -141,6 +142,13 @@ mod tests {
         assert!(parse_test("1 + -1"));
         assert!(parse_test("-4 + -1"));
         assert!(parse_test("--4 + -1"));
+    }
+
+    #[test]
+    fn parens() {
+        assert!(!parse_test("()"));
+        assert!(parse_test("(59.9)"));
+        assert!(parse_test("1 + (1)"));
     }
 
     fn parse_test(input: &str) -> bool {

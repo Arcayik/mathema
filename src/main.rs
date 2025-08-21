@@ -84,8 +84,9 @@ fn main() {
 
         let process_result = process_statement(&mut context, stmt);
         match process_result {
-            Ok(ans) => prompt.show_answer(ans),
-            Err(diags) => diags.iter().for_each(|d| prompt.show_diagnostic(d)),
+            Outcome::ShowAnswer(ans) => prompt.show_answer(ans),
+            Outcome::ShowDiagnostics(diags) => diags.iter().for_each(|d| prompt.show_diagnostic(d)),
+            Outcome::AssignVar(..) => {},
         }
     }
 }
@@ -100,19 +101,29 @@ fn parse_ast<T: ToString>(input: T) -> Result<Stmt, Vec<Diagnostic>> {
     }
 }
 
-fn process_statement(ctxt: &mut Context, stmt: Stmt) -> Result<f64, Vec<Diagnostic>> {
+pub enum Outcome {
+    ShowDiagnostics(Vec<Diagnostic>),
+    ShowAnswer(f64),
+    AssignVar(Box<str>, f64),
+}
+
+fn process_statement(ctxt: &mut Context, stmt: Stmt) -> Outcome {
     match stmt {
         Stmt::Expr(expr) => {
-            expr.eval(ctxt).map_err(|e| vec![e.into()])
+            let result = expr.eval(ctxt).map_err(|e| vec![e.into()]);
+            match result {
+                Ok(num) => Outcome::ShowAnswer(num),
+                Err(diags) => Outcome::ShowDiagnostics(diags)
+            }
         },
         Stmt::VarDecl(decl) => {
             let name = decl.var_name.repr;
             match decl.expr.eval(ctxt) {
                 Ok(ans) => {
-                    ctxt.set_variable(name, ans);
-                    Ok(ans)
+                    ctxt.set_variable(name.clone(), ans);
+                    Outcome::AssignVar(name, ans)
                 }
-                Err(e) => Err(vec![e.into()])
+                Err(e) => Outcome::ShowDiagnostics(vec![e.into()])
             }
         }
     }

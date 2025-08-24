@@ -1,3 +1,6 @@
+use crate::parse::{Span, Spanned};
+
+#[derive(Debug)]
 pub struct Punctuated<T, S> {
     list: Vec<(T, S)>,
     end: Option<Box<T>>,
@@ -61,6 +64,20 @@ impl<T, S> Punctuated<T, S> {
             list: self.list.iter(),
             end: self.end.as_ref().map(Box::as_ref).into_iter()
         }
+    }
+}
+
+impl<T: Spanned, S: Spanned> Punctuated<T, S> {
+    pub fn try_span(&self) -> Option<Span> {
+        let first_span = self.list.first()?.0.span();
+        let last_span = match &self.end {
+            Some(value) => value.span(),
+            None => self.list.last().unwrap().1.span()
+        };
+        Some(Span {
+            start: first_span.start,
+            end: last_span.end
+        })
     }
 }
 

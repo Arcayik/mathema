@@ -5,11 +5,13 @@ mod parser;
 mod stmt;
 mod expr;
 mod eval;
+mod function;
+mod punctuated;
 
-pub use token::{Span, Spanned, Token, Parse};
+pub use token::{Span, Spanned, Token, Parse, Ident, Literal};
 pub use lexer::{tokenize, LexError};
 pub use parser::{parse_stmt, ParseError};
 pub use stmt::Stmt;
-pub use expr::Expr;
+pub use expr::*;
 pub use eval::{AstNode, EvalError};
 

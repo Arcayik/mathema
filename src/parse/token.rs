@@ -47,10 +47,10 @@ macro_rules! define_punctuation {
                         if punct.repr.to_string() == $token {
                             Ok(Self { span: punct.span })
                         } else {
-                            Err(input.error("Expected punct"))
+                            Err(input.error(&format!("Expected {}", stringify!($name))))
                         }
                     } else {
-                        Err(input.error("Not a punct"))
+                        Err(input.error("Expected punct"))
                     }
                 }
             }
@@ -75,17 +75,36 @@ macro_rules! define_delimiters {
     ($($variant:ident pub struct $name:ident $string:literal)*) => {
         $(
             #[allow(unused)]
-            pub struct $name;
+            #[derive(Debug)]
+            pub struct $name {
+                span: $crate::parse::Span
+            }
+
+            impl_spanned! { $name }
+
+            impl Parse for $name {
+                fn parse(input: ParseStream) -> Result<Self, ParseError> {
+                    if let LexToken::Group(group, _) = input.next_token() {
+                        if matches!(group.delim, Delimiter::$variant) {
+                            Ok(Self { span: group.span() })
+                        } else {
+                            Err(input.error(&format!("Expected {}", $string)))
+                        }
+                    } else {
+                        Err(input.error("Expected group"))
+                    }
+                }
+            }
 
             impl Token for $name {
                 fn peek<'s>(input: ParseStream) -> bool {
                     match input.peek_token() {
-                        LexToken::Group(g) => matches!(g.delim, Delimiter::$variant),
+                        LexToken::Group(g, _) => matches!(g.delim, Delimiter::$variant),
                         _ => false
                     }
                 }
 
-                fn display() -> &'static str { "paren" }
+                fn display() -> &'static str { $string }
             }
         )*
     };
@@ -93,11 +112,12 @@ macro_rules! define_delimiters {
 
 #[macro_export]
 macro_rules! Token {
-    [=] => { $crate::parse::token::Equals };
     [+] => { $crate::parse::token::Plus };
     [-] => { $crate::parse::token::Minus };
     [*] => { $crate::parse::token::Star };
     [/] => { $crate::parse::token::Slash };
+    [=] => { $crate::parse::token::Equals };
+    [,] => { $crate::parse::token::Comma }
 }
 
 define_punctuation! {
@@ -106,6 +126,7 @@ define_punctuation! {
     "*"     pub struct Star
     "/"     pub struct Slash
     "="     pub struct Equals
+    ","     pub struct Comma
 }
 
 define_delimiters! {
@@ -119,8 +140,22 @@ pub enum LexToken {
     Literal(Literal),
     Ident(Ident),
     Punct(Punct),
-    Group(Group),
+    Group(Group, usize),
     End(isize)
+}
+
+impl std::fmt::Display for LexToken {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let str = match self {
+            LexToken::Literal(_) => Literal::display(),
+            LexToken::Ident(i) => i.repr.as_ref(),
+            LexToken::Punct(p) => p.repr.as_ref(),
+            LexToken::Group(g, o) => &format!("{:?}({})", g.delim, o),
+            LexToken::End(o) => &format!("end({})", o),
+
+        };
+        write!(f, "{}", str)
+    }
 }
 
 #[derive(Debug, Clone)]

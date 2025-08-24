@@ -87,6 +87,7 @@ fn main() {
             Outcome::ShowAnswer(ans) => prompt.show_answer(ans),
             Outcome::ShowDiagnostics(diags) => diags.iter().for_each(|d| prompt.show_diagnostic(d)),
             Outcome::AssignVar(..) => {},
+            Outcome::DefineFn => {},
         }
     }
 }
@@ -105,6 +106,7 @@ pub enum Outcome {
     ShowDiagnostics(Vec<Diagnostic>),
     ShowAnswer(f64),
     AssignVar(Box<str>, f64),
+    DefineFn
 }
 
 fn process_statement(ctxt: &mut Context, stmt: Stmt) -> Outcome {
@@ -112,19 +114,27 @@ fn process_statement(ctxt: &mut Context, stmt: Stmt) -> Outcome {
         Stmt::Expr(expr) => {
             let result = expr.eval(ctxt).map_err(|e| vec![e.into()]);
             match result {
-                Ok(num) => Outcome::ShowAnswer(num),
+                Ok(num) => {
+                    ctxt.set_variable("ans".into(), num);
+                    Outcome::ShowAnswer(num)
+                },
                 Err(diags) => Outcome::ShowDiagnostics(diags)
             }
         },
-        Stmt::VarDecl(decl) => {
-            let name = decl.var_name.repr;
-            match decl.expr.eval(ctxt) {
+        Stmt::VarDecl(var_decl) => {
+            let name = var_decl.var_name.repr;
+            match var_decl.expr.eval(ctxt) {
                 Ok(ans) => {
                     ctxt.set_variable(name.clone(), ans);
                     Outcome::AssignVar(name, ans)
                 }
                 Err(e) => Outcome::ShowDiagnostics(vec![e.into()])
             }
+        }
+        Stmt::FnDecl(fn_decl) => {
+            let name = fn_decl.sig.fn_name;
+            println!("Defined function '{}'", name.repr);
+            Outcome::DefineFn
         }
     }
 }
@@ -160,6 +170,11 @@ mod tests {
         assert!(!parse_test("()"));
         assert!(parse_test("(59.9)"));
         assert!(parse_test("1 + (1)"));
+    }
+
+    #[test]
+    fn var_declaration() {
+        assert!(parse_test("x = 50"));
     }
 
     fn parse_test(input: &str) -> bool {

@@ -1,4 +1,4 @@
-use crate::{parse::{token::{Delimiter, LexToken}}, Token};
+use crate::{parse::{punctuated::Punctuated, stmt::parse_punctuated_group, token::{Delimiter, LexToken, Paren}}, Token};
 use super::{
     token::{End, Ident, Literal, Parse, Span, Spanned, Token},
     parser::{ParseStream, Result},
@@ -9,6 +9,7 @@ pub enum Expr {
     Binary(ExprBinary),
     Unary(ExprUnary),
     Group(ExprGroup),
+    FnCall(ExprFnCall),
 }
 
 impl std::fmt::Debug for Expr {
@@ -17,7 +18,8 @@ impl std::fmt::Debug for Expr {
             Self::Value(t) => write!(f, "{:?}", t),
             Self::Binary(t) => write!(f, "{:?}", t),
             Self::Unary(t) => write!(f, "{:?}", t),
-            Self::Group(t) => write!(f, "{:?}", t)
+            Self::Group(t) => write!(f, "{:?}", t),
+            Self::FnCall(t) => write!(f, "{:?}", t),
         }
     }
 }
@@ -46,20 +48,27 @@ impl From<ExprGroup> for Expr {
     }
 }
 
+impl From<ExprFnCall> for Expr {
+    fn from(value: ExprFnCall) -> Self {
+        Expr::FnCall(value)
+    }
+}
+
 impl Spanned for Expr {
     fn span(&self) -> Span {
         match self {
             Self::Value(e) => e.span(),
             Self::Binary(e) => e.span(),
             Self::Unary(e) => e.span(),
-            Self::Group(e) => e.span()
+            Self::Group(e) => e.span(),
+            Self::FnCall(e) => e.span()
         }
     }
 }
 
 impl Parse for Expr {
     fn parse(input: ParseStream) -> Result<Self> {
-        let lhs = parsing::value_or_unary_or_parens(input)?;
+        let lhs = parsing::parse_expr_lhs(input)?;
         parsing::parse_expr(input, lhs, Precedence::MIN)
     }
 }
@@ -197,7 +206,7 @@ impl Parse for ExprUnary {
     fn parse(input: ParseStream) -> Result<Self> {
         Ok(ExprUnary {
             op: input.parse()?,
-            expr: Box::new(parsing::value_or_unary_or_parens(input)?),
+            expr: Box::new(parsing::parse_expr_lhs(input)?),
         })
     }
 }
@@ -251,7 +260,7 @@ impl Spanned for ExprGroup {
 
 impl Parse for ExprGroup {
     fn parse(input: ParseStream) -> Result<Self> {
-        if let LexToken::Group(g) = input.next_token() {
+        if let LexToken::Group(g, _) = input.next_token() {
             Ok(ExprGroup {
                 delim: g.delim,
                 expr: Box::new(input.parse()?)
@@ -281,18 +290,55 @@ impl Precedence {
             Expr::Binary(b) => Precedence::of_binop(&b.op),
             Expr::Unary(_) => Precedence::Unary,
             Expr::Group(_) => Precedence::Unambiguous,
+            Expr::FnCall(_) => Precedence::Unambiguous,
         }
     }
 }
+
+pub struct ExprFnCall {
+    pub(super) name: Ident,
+    pub(super) parens: Paren,
+    pub(super) inputs: Punctuated<Expr, Token![,]>
+}
+
+impl std::fmt::Debug for ExprFnCall {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{:?}({:?})", self.name, self.inputs)
+    }
+}
+
+impl Spanned for ExprFnCall {
+    fn span(&self) -> Span {
+        let start = self.name.span().start;
+        let end = self.parens.span().end;
+        Span { start, end }
+    }
+}
+
+impl Parse for ExprFnCall {
+    fn parse(input: ParseStream) -> Result<Self> {
+        let name = input.parse()?;
+        let parens = input.parse()?;
+        Ok(ExprFnCall {
+            name,
+            parens,
+            inputs: parse_punctuated_group(input)?,
+        })
+    }
+}
+
+pub use parsing::parse_expr;
 
 mod parsing {
     use crate::parse::token::Paren;
 
     use super::*;
 
-    pub fn value_or_unary_or_parens(input: ParseStream) -> Result<Expr> {
+    pub fn parse_expr_lhs(input: ParseStream) -> Result<Expr> {
         if input.peek::<Token![-]>() {
             input.parse().map(Expr::Unary)
+        } else if input.peek::<Ident>() && input.peek2::<Paren>() {
+            input.parse().map(Expr::FnCall)
         } else if input.peek::<Literal>() || input.peek::<Ident>() {
             input.parse().map(Expr::Value)
         } else if input.peek::<Paren>() {
@@ -308,9 +354,12 @@ mod parsing {
         base: Precedence
     ) -> Result<Expr> {
         loop {
+            // NOTE: point of interest
             if input.peek::<End>() {
-                input.next_token();
                 break;
+            }
+            if !peek_binop(input) {
+                break
             }
 
             let begin = input.save_pos();
@@ -332,11 +381,16 @@ mod parsing {
         Ok(left)
     }
 
+    fn peek_binop(input: ParseStream) -> bool {
+        input.peek::<Token![+]>() || input.peek::<Token![-]>() ||
+            input.peek::<Token![*]>() || input.peek::<Token![/]>()
+    }
+
     fn parse_binop_rhs(
         input: ParseStream,
         precedence: Precedence,
     ) -> Result<Box<Expr>> {
-        let mut rhs = value_or_unary_or_parens(input)?;
+        let mut rhs = parse_expr_lhs(input)?;
         loop {
             let begin = input.save_pos();
             let next = peek_precedence(input);

@@ -64,7 +64,7 @@ impl<'s> Tokenizer<'s> {
                     self.lexer.next();
                 },
 
-                '+' | '-' | '*' | '/' | '=' => {
+                '+' | '-' | '*' | '/' | '=' | ',' => {
                     return Some(self.punct())
                 },
 
@@ -100,7 +100,7 @@ impl<'s> Tokenizer<'s> {
             let token = self.tokens.get(unclosed_idx)
                 .expect("delim stack must have valid group start index");
             let group = match token {
-                LexToken::Group(g) => g,
+                LexToken::Group(g, _) => g,
                 _ => panic!("delim stack index does not point to group token")
             };
             self.unclosed_delim(group.clone());
@@ -147,18 +147,22 @@ impl<'s> Tokenizer<'s> {
 
         let group = Group { delim, span };
         self.push_group();
-        LexToken::Group(group)
+        LexToken::Group(group, 0)
     }
 
     fn close_group(&mut self) -> Option<LexToken> {
+        let num_tokens = self.tokens.len();
         let ch = self.lexer.next()
             .expect("calling code must ensure remaining characters exist");
 
         let top_idx = self.pop_group()?;
-        let top_group = self.tokens.get(top_idx)
+        let top_group = self.tokens.get_mut(top_idx)
             .expect("delim stack must have valid group start index");
         let top_delim = match top_group {
-            LexToken::Group(g) => g.delim,
+            LexToken::Group(group, offset) => {
+                *offset = num_tokens - top_idx;
+                group.delim
+            },
             _ => return None
         };
 
@@ -170,7 +174,7 @@ impl<'s> Tokenizer<'s> {
         };
 
         if top_delim == delim {
-            let offset = top_idx as isize - self.tokens.len() as isize;
+            let offset = top_idx as isize - num_tokens as isize;
             Some(LexToken::End(offset))
         } else {
             self.trailing_delim();
@@ -301,5 +305,7 @@ pub fn tokenize(input: &str) -> (Box<[LexToken]>, Vec<LexError>) {
     tokenizer.process();
     tokenizer.process_unclosed_groups();
 
-    (tokenizer.tokens.into(), tokenizer.errors)
+    let buffer: Box<[LexToken]> = tokenizer.tokens.into();
+    let errors: Vec<LexError> = tokenizer.errors;
+    (buffer, errors)
 }

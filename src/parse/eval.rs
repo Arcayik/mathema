@@ -52,7 +52,8 @@ impl AstNode for Expr {
             Self::Value(value) => value.eval(ctxt),
             Self::Binary(expr) => expr.eval(ctxt),
             Self::Unary(expr) => expr.eval(ctxt),
-            Self::Group(group) => group.eval(ctxt)
+            Self::Group(group) => group.eval(ctxt),
+            Self::FnCall(call) => call.eval(ctxt),
         }
     }
 }
@@ -106,5 +107,11 @@ impl AstNode for ExprUnary {
 impl AstNode for ExprGroup {
     fn eval(&self, ctxt: &Context) -> Result<f64> {
         self.expr.eval(ctxt)
+    }
+}
+
+impl AstNode for ExprFnCall {
+    fn eval(&self, ctxt: &Context) -> Result<f64> {
+        todo!()
     }
 }

@@ -8,10 +8,11 @@ mod eval;
 mod function;
 mod punctuated;
 
-pub use token::{Span, Spanned, Token, Parse, Ident, Literal};
+pub use token::{Span, Spanned, Token, Parse};
 pub use lexer::{tokenize, LexError};
 pub use parser::{parse_stmt, ParseError};
 pub use stmt::Stmt;
 pub use expr::*;
-pub use eval::{AstNode, EvalError};
+pub use eval::ExprError;
+pub use function::{Function, FunctionError, create_function};
 

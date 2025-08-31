@@ -296,9 +296,9 @@ impl Precedence {
 }
 
 pub struct ExprFnCall {
-    pub(super) name: Ident,
-    pub(super) parens: Paren,
-    pub(super) inputs: Punctuated<Expr, Token![,]>
+    pub name: Ident,
+    pub parens: Paren,
+    pub inputs: Punctuated<Expr, Token![,]>
 }
 
 impl std::fmt::Debug for ExprFnCall {
@@ -326,8 +326,6 @@ impl Parse for ExprFnCall {
         })
     }
 }
-
-pub use parsing::parse_expr;
 
 mod parsing {
     use crate::parse::token::Paren;

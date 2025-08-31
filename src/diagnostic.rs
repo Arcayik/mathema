@@ -1,4 +1,4 @@
-use crate::parse::{EvalError, ParseError, Span, Spanned, LexError};
+use crate::parse::{ExprError, FunctionError, LexError, ParseError, Span, Spanned};
 
 #[derive(Debug)]
 pub struct Diagnostic {
@@ -29,11 +29,30 @@ impl From<ParseError> for Diagnostic {
     }
 }
 
-impl From<EvalError> for Diagnostic {
-    fn from(value: EvalError) -> Self {
-        let msg = value.to_string();
-        let spans = value.spans;
-        Diagnostic { msg, spans }
+impl From<ExprError> for Diagnostic {
+    fn from(value: ExprError) -> Self {
+        match value {
+            ExprError::UndefinedVar(var) => Diagnostic {
+                msg: format!("Undefined Variable: {}", var.repr),
+                spans: vec![var.span]
+            },
+            ExprError::UndefinedFunc(func) => Diagnostic {
+                msg: format!("Undefined Function: {}", func.repr),
+                spans: vec![func.span]
+            },
+        }
+    }
+}
+
+impl From<FunctionError> for Diagnostic {
+    fn from(value: FunctionError) -> Self {
+        match value {
+            FunctionError::ExprError(e) => e.into(),
+            FunctionError::Recursion(func) => Diagnostic {
+                msg: format!("Recursive function call: {}", func.name.repr),
+                spans: vec![func.span()]
+            }
+        }
     }
 }
 

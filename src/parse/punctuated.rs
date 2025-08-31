@@ -51,10 +51,6 @@ impl<T, S> Punctuated<T, S> {
         self.list.push((*last, separator));
     }
 
-    pub fn trailing_punct(&self) -> bool {
-        self.end.is_none() && !self.is_empty()
-    }
-
     pub fn empty_or_trailing(&self) -> bool {
         self.end.is_none()
     }
@@ -64,6 +60,14 @@ impl<T, S> Punctuated<T, S> {
             list: self.list.iter(),
             end: self.end.as_ref().map(Box::as_ref).into_iter()
         }
+    }
+
+    pub fn values(self) -> Vec<T> {
+        self.list
+            .into_iter()
+            .map(|(t, _)| t)
+            .chain(self.end.into_iter().map(|t| *t))
+            .collect()
     }
 }
 

@@ -1,55 +1,16 @@
-use crate::{context::Context, parse::{expr::*, token::{Ident, Span}}};
+use crate::{context::Context, parse::{expr::*, token::Ident, Function}};
+use std::rc::Rc;
 
 #[derive(Debug)]
-pub struct EvalError {
-    pub undefined: Vec<Box<str>>,
-    pub spans: Vec<Span>,
+pub enum ExprError {
+    UndefinedVar(Ident),
+    UndefinedFunc(Ident),
 }
 
-impl std::fmt::Display for EvalError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "Undefined variable{}: {}",
-            if self.undefined.len() > 1 { "s" } else { "" },
-            self.undefined.join(", "),
-        )
-    }
-}
-
-impl EvalError {
-    fn new(ident: Ident) -> Self {
-        let name = ident.repr;
-        let span = ident.span;
-        let undefined = vec![name];
-        EvalError { undefined, spans: vec![span] }
-    }
-
-    fn combine(left: Result<f64>, right: Result<f64>) -> Option<Self> {
-        match (left, right) {
-            (Err(mut l), Err(mut r)) => {
-                for name in r.undefined.drain(..) {
-                    if !l.undefined.contains(&name) {
-                        l.undefined.push(name);
-                    }
-                }
-                l.spans.append(&mut r.spans);
-                Some(l)
-            },
-            (Err(e), _) | (_, Err(e)) => Some(e),
-            _ => None
-        }
-    }
-}
-
-pub type Result<T> = std::result::Result<T, EvalError>;
-
-pub trait AstNode {
-    fn eval(&self, ctxt: &Context) -> Result<f64>;
-}
-
-impl AstNode for Expr {
-    fn eval(&self, ctxt: &Context) -> Result<f64> {
+impl Expr {
+    pub fn eval(&self, ctxt: &Context) -> Result<f64, Vec<ExprError>> {
         match self {
-            Self::Value(value) => value.eval(ctxt),
+            Self::Value(value) => value.eval(ctxt).map_err(|e| vec![e]),
             Self::Binary(expr) => expr.eval(ctxt),
             Self::Unary(expr) => expr.eval(ctxt),
             Self::Group(group) => group.eval(ctxt),
@@ -58,8 +19,8 @@ impl AstNode for Expr {
     }
 }
 
-impl AstNode for ExprValue {
-    fn eval(&self, ctxt: &Context) -> Result<f64> {
+impl ExprValue {
+    pub fn eval(&self, ctxt: &Context) -> Result<f64, ExprError> {
         match self {
             Self::Ident(ident) => try_get_variable(ctxt, ident),
             Self::Literal(literal) => Ok(literal.num),
@@ -67,32 +28,38 @@ impl AstNode for ExprValue {
     }
 }
 
-fn try_get_variable(ctxt: &Context, ident: &Ident) -> Result<f64> {
-    match ctxt.get_variable(ident.repr.clone()) {
+fn try_get_variable(ctxt: &Context, ident: &Ident) -> Result<f64, ExprError> {
+    match ctxt.get_variable(ident.repr.as_ref()) {
         Some(num) => Ok(num),
-        None => Err(EvalError::new(ident.clone()))
+        None => Err(ExprError::UndefinedVar(ident.clone()))
     }
 }
 
-impl AstNode for ExprBinary {
-    fn eval(&self, ctxt: &Context) -> Result<f64> {
+impl ExprBinary {
+    pub fn eval(&self, ctxt: &Context) -> Result<f64, Vec<ExprError>> {
         let left = self.lhs.eval(ctxt);
         let right = self.rhs.eval(ctxt);
-        if let (Ok(l), Ok(r)) = (&left, &right) {
-            match self.op {
+
+        match (left, right) {
+            (Ok(l), Ok(r)) => match self.op {
                 BinOp::Add(_) => Ok(l + r),
                 BinOp::Sub(_) => Ok(l - r),
                 BinOp::Mul(_) => Ok(l * r),
                 BinOp::Div(_) => Ok(l / r),
+            },
+
+            (Err(e), Ok(_)) | (Ok(_), Err(e)) => Err(e),
+
+            (Err(mut le), Err(mut re)) => {
+                le.append(&mut re);
+                Err(le)
             }
-        } else {
-            Err(EvalError::combine(left, right).unwrap())
         }
     }
 }
 
-impl AstNode for ExprUnary {
-    fn eval(&self, ctxt: &Context) -> Result<f64> {
+impl ExprUnary {
+    pub fn eval(&self, ctxt: &Context) -> Result<f64, Vec<ExprError>> {
         let right = self.expr.eval(ctxt);
         if let Ok(r) = right {
             match self.op {
@@ -104,14 +71,31 @@ impl AstNode for ExprUnary {
     }
 }
 
-impl AstNode for ExprGroup {
-    fn eval(&self, ctxt: &Context) -> Result<f64> {
+impl ExprGroup {
+    pub fn eval(&self, ctxt: &Context) -> Result<f64, Vec<ExprError>> {
         self.expr.eval(ctxt)
     }
 }
 
-impl AstNode for ExprFnCall {
-    fn eval(&self, ctxt: &Context) -> Result<f64> {
-        todo!()
+impl ExprFnCall {
+    pub fn eval(&self, ctxt: &Context) -> Result<f64, Vec<ExprError>> {
+        let name = &self.name.repr;
+        let func = ctxt.get_function(name)
+            .ok_or(vec![ExprError::UndefinedFunc(self.name.clone())])?;
+
+        let mut arg_exprs = Vec::new();
+        for expr in self.inputs.iter() {
+            arg_exprs.push(expr.eval(ctxt)?);
+        };
+
+        let call = func.call(&arg_exprs);
+
+        Ok(call)
     }
+}
+
+fn try_get_function(ctxt: &Context, ident: &Ident) -> Result<Rc<Function>, ExprError> {
+    let name = &ident.repr;
+    let func = ctxt.get_function(name);
+    func.ok_or(ExprError::UndefinedVar(ident.clone()))
 }

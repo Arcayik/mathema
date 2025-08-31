@@ -1,4 +1,4 @@
-use std::{any::type_name, cell::Cell};
+use std::cell::Cell;
 
 use crate::parse::{stmt::Stmt, token::{LexToken, Span, Spanned}};
 

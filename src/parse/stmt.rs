@@ -1,4 +1,4 @@
-use crate::{parse::{expr::{ExprFnCall, Precedence, ExprValue}, parse_expr, punctuated::Punctuated, token::{End, Paren}}, Token};
+use crate::{parse::{punctuated::Punctuated, token::{End, Paren}}, Token};
 use super::{
     expr::Expr,
     token::{Ident, Spanned, Parse, Span},
@@ -183,6 +183,6 @@ pub fn parse_ambiguous_fn(input: ParseStream) -> Result<Stmt, ParseError> {
         }.into())
     } else {
         input.restore_pos(begin);
-        input.parse().map(Expr::FnCall).map(Stmt::Expr)
+        input.parse().map(Stmt::Expr)
     }
 }

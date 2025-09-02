@@ -8,6 +8,26 @@ pub struct Punctuated<T, S> {
     end: Option<Box<T>>,
 }
 
+impl<T: Spanned, S: Spanned> Punctuated<T, S> {
+    pub fn try_span(&self) -> Option<Span> {
+        let first_span = self.list.first()?.0.span();
+        let last_span = match &self.end {
+            Some(value) => value.span(),
+            None => self.list.last().unwrap().1.span()
+        };
+        Some(Span {
+            start: first_span.start,
+            end: last_span.end
+        })
+    }
+}
+
+impl<T, S> Default for Punctuated<T, S> {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl<T, S> Punctuated<T, S> {
     pub const fn new() -> Self {
         Punctuated {
@@ -70,20 +90,6 @@ impl<T, S> Punctuated<T, S> {
             .map(|(t, _)| t)
             .chain(self.end.into_iter().map(|t| *t))
             .collect()
-    }
-}
-
-impl<T: Spanned, S: Spanned> Punctuated<T, S> {
-    pub fn try_span(&self) -> Option<Span> {
-        let first_span = self.list.first()?.0.span();
-        let last_span = match &self.end {
-            Some(value) => value.span(),
-            None => self.list.last().unwrap().1.span()
-        };
-        Some(Span {
-            start: first_span.start,
-            end: last_span.end
-        })
     }
 }
 

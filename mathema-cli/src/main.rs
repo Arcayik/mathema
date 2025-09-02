@@ -1,8 +1,8 @@
 use std::io::Write;
 
 use mathema_core::{
-    parsing::{tokenize, parse_stmt, Stmt},
-    Diagnostic, Context, create_function,
+    parsing::{ParseBuffer, tokenize, Stmt},
+    Diagnostic, Context, Outcome, create_function,
 };
 
 pub struct Prompt {
@@ -65,18 +65,17 @@ fn main() {
 fn parse_ast<T: ToString>(input: T) -> Result<Stmt, Vec<Diagnostic>> {
     let input = input.to_string();
     let (tokens, errors) = tokenize(&input);
-    if !errors.is_empty() {
-        Err(Diagnostic::from_vec(errors))
-    } else {
-        parse_stmt(tokens).map_err(|e| vec![e.into()])
-    }
-}
 
-pub enum Outcome {
-    ShowDiagnostics(Vec<Diagnostic>),
-    ShowAnswer(f64),
-    AssignVar(Box<str>, f64),
-    DefineFn(Box<str>)
+    if !errors.is_empty() {
+        return Err(Diagnostic::from_vec(errors))
+    }
+
+    let statement = {
+        let parser = ParseBuffer::new(tokens);
+        parser.parse().map_err(|e| vec![e.into()])
+    };
+
+    statement
 }
 
 fn process_statement(ctxt: &mut Context, stmt: Stmt) -> Outcome {
@@ -85,18 +84,18 @@ fn process_statement(ctxt: &mut Context, stmt: Stmt) -> Outcome {
             let result = expr.eval(ctxt).map_err(Diagnostic::from_vec);
             match result {
                 Ok(num) => {
-                    ctxt.set_variable("ans", num);
+                    ctxt.set_variable("ans".into(), num);
                     Outcome::ShowAnswer(num)
                 },
                 Err(diags) => Outcome::ShowDiagnostics(diags)
             }
         },
         Stmt::VarDecl(var_decl) => {
-            let name = &var_decl.var_name.repr;
+            let name = var_decl.var_name.repr;
             match var_decl.expr.eval(ctxt) {
                 Ok(ans) => {
-                    ctxt.set_variable(name, ans);
-                    Outcome::AssignVar(name.clone(), ans)
+                    ctxt.set_variable(name.clone(), ans);
+                    Outcome::AssignVar(name, ans)
                 }
                 Err(e) => Outcome::ShowDiagnostics(Diagnostic::from_vec(e))
             }
@@ -114,7 +113,7 @@ fn process_statement(ctxt: &mut Context, stmt: Stmt) -> Outcome {
                 .map_err(Diagnostic::from);
             match result {
                 Ok(f) => {
-                    ctxt.set_function(&name, f);
+                    ctxt.set_function(name.clone(), f);
                     Outcome::DefineFn(name)
                 },
                 Err(d) => Outcome::ShowDiagnostics(vec![d])

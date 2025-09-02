@@ -55,7 +55,7 @@ impl<'c> FunctionBuilder<'c> {
                 } 
 
                 // then check if it is a variable in scope
-                let num = self.context.get_variable(&name)
+                let num = self.context.get_variable(name)
                     .ok_or(ExprError::UndefinedVar(id))?;
 
                 Ok(ValueNode::Num(NumNode { value: num }))
@@ -99,17 +99,26 @@ impl<'c> FunctionBuilder<'c> {
 }
 
 pub struct Function {
-    name: Box<str>,
-    params: Box<[Box<str>]>,
-    ast: AlgebraTree
+    pub(crate) name: Box<str>,
+    pub(crate) params: Box<[Box<str>]>,
+    pub(crate) ast: Box<AlgebraTree>
 }
 
 impl Function {
     pub fn new(name: Box<str>, params: Box<[Box<str>]>, ast: AlgebraTree) -> Self {
+        let ast = Box::new(ast);
         Function { name, params, ast }
     }
 
-    fn num_params(&self) -> usize {
+    pub fn name(&self) -> &str {
+        &self.name
+    }
+
+    pub fn params(&self) -> &[Box<str>] {
+        &self.params
+    }
+
+    pub fn num_params(&self) -> usize {
         self.params.len()
     }
 

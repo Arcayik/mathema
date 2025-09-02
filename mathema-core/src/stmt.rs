@@ -162,7 +162,7 @@ impl Parse for FnDecl {
     }
 }
 
-pub fn parse_ambiguous_fn(input: ParseStream) -> Result<Stmt, ParseError> {
+fn parse_ambiguous_fn(input: ParseStream) -> Result<Stmt, ParseError> {
     let begin = input.save_pos();
 
     let name = input.parse()?;

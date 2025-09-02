@@ -12,19 +12,22 @@ mod diagnostic;
 
 pub mod parsing {
     pub use crate::token::{Span, Spanned, Token, Parse};
-    pub use crate::stmt::Stmt;
-    pub use crate::expr::{BinOp, Expr, ExprBinary, ExprUnary, ExprValue, ExprFnCall, ExprGroup, Precedence, UnaryOp};
     pub use crate::lexer::tokenize;
-    pub use crate::parser::parse_stmt;
+    pub use crate::parser::{ParseBuffer, ParseError, ParseStream};
+    pub use crate::expr::{BinOp, Expr, ExprBinary, ExprUnary, ExprValue, ExprFnCall, ExprGroup, Precedence, UnaryOp};
+    pub use crate::stmt::Stmt;
 }
 
 pub use function::{Function, FunctionError, create_function};
-pub use context::Context;
+pub use context::{Context, Outcome};
 pub use diagnostic::Diagnostic;
 
 #[cfg(test)]
 mod tests {
-    use crate::parsing::{tokenize, parse_stmt};
+    use crate::{
+        parsing::tokenize,
+        parser::parse_stmt,
+    };
 
     #[test]
     fn sum_product_precedence() {

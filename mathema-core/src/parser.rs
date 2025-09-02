@@ -1,7 +1,6 @@
 use std::cell::Cell;
 
 use crate::{
-    stmt::Stmt,
     token::{Span, Spanned, Token, Parse},
     lexer::LexToken
 };
@@ -144,9 +143,4 @@ impl ParseBuffer {
     pub fn spanned_error(&self, msg: &str, span: Span) -> ParseError {
         ParseError { msg: msg.to_string(), span }
     }
-}
-
-pub fn parse_stmt(src: Box<[LexToken]>) -> Result<Stmt> {
-    let parser = ParseBuffer::new(src);
-    parser.parse()
 }

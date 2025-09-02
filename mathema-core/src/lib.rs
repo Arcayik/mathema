@@ -25,8 +25,9 @@ pub use diagnostic::Diagnostic;
 #[cfg(test)]
 mod tests {
     use crate::{
-        parsing::tokenize,
-        parser::parse_stmt,
+        lexer::tokenize,
+        parser::ParseBuffer, 
+        stmt::Stmt,
     };
 
     #[test]
@@ -54,8 +55,10 @@ mod tests {
     #[test]
     fn parens() {
         assert!(!parse_test("()"));
+        assert!(!parse_test("(2*4) )"));
         assert!(parse_test("(59.9)"));
         assert!(parse_test("1 + (1)"));
+        assert!(parse_test("((1+1) * 30)"));
     }
 
     #[test]
@@ -71,7 +74,9 @@ mod tests {
             return false;
         } 
 
-        let ast = parse_stmt(tokens);
+        let parser = ParseBuffer::new(tokens);
+        let ast = parser.parse::<Stmt>();
+
         println!("Input: [{}]", input);
         println!("AST: \n{:#?}", ast);
         ast.is_ok()

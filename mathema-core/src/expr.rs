@@ -240,8 +240,8 @@ impl Parse for BinOp {
 }
 
 pub struct ExprUnary {
-    pub(super) op: UnaryOp,
-    pub(super) expr: Box<Expr>,
+    pub(crate) op: UnaryOp,
+    pub(crate) expr: Box<Expr>,
 }
 
 impl std::fmt::Debug for ExprUnary {
@@ -330,10 +330,12 @@ impl Spanned for ExprGroup {
 impl Parse for ExprGroup {
     fn parse(input: ParseStream) -> Result<Self, ParseError> {
         if let LexToken::Group(g, _) = input.next_token() {
-            Ok(ExprGroup {
+            let group = ExprGroup {
                 delim: g.delim,
                 expr: Box::new(input.parse()?)
-            })
+            };
+            assert!(matches!(input.next_token(), LexToken::End(..))); // eat End
+            Ok(group)
         } else {
             Err(input.error("Expected group"))
         }
@@ -350,7 +352,7 @@ impl ExprGroup {
 pub enum Precedence { Assign, Sum, Product, Unary, Unambiguous }
 
 impl Precedence {
-    pub(super) const MIN: Self = Precedence::Assign;
+    pub(crate) const MIN: Self = Precedence::Assign;
 
     pub fn of_binop(op: &BinOp) -> Self {
         match op {
@@ -444,7 +446,6 @@ mod parsing {
         base: Precedence
     ) -> Result<Expr, ParseError> {
         loop {
-            // NOTE: point of interest
             if input.peek::<End>() {
                 break;
             }

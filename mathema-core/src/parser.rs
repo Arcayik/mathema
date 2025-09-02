@@ -50,7 +50,6 @@ impl ParseBuffer {
         &self.src[self.pos.get()]
     }
 
-    #[allow(unused)]
     pub fn debug(&self) {
         let line = self.src.iter()
             .enumerate()

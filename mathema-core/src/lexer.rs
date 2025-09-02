@@ -172,13 +172,23 @@ impl<'s> Tokenizer<'s> {
     }
 
     fn close_group(&mut self) -> Option<LexToken> {
-        let num_tokens = self.tokens.len();
+        let top_idx = match self.pop_group() {
+            Some(i) => i,
+            None => {
+                self.trailing_delim();
+                self.lexer.next();
+                return None;
+            }
+        };
+
         let ch = self.lexer.next()
             .expect("calling code must ensure remaining characters exist");
 
-        let top_idx = self.pop_group()?;
+        let num_tokens = self.tokens.len();
+
         let top_group = self.tokens.get_mut(top_idx)
             .expect("delim stack must have valid group start index");
+
         let top_delim = match top_group {
             LexToken::Group(group, offset) => {
                 *offset = num_tokens - top_idx;
@@ -201,11 +211,10 @@ impl<'s> Tokenizer<'s> {
             self.trailing_delim();
             None
         }
-
     }
 
     fn push_group(&mut self) {
-        self.delim_stack.push(self.tokens.len())
+        self.delim_stack.push(self.tokens.len());
     }
 
     fn pop_group(&mut self) -> Option<usize> {
@@ -229,7 +238,7 @@ impl<'s> Tokenizer<'s> {
         self.errors.push(error);
     }
 
-    pub fn trailing_delim(&mut self) {
+    fn trailing_delim(&mut self) {
         let span = self.lexer.span_char();
         let error = LexError::TrailingDelim(span);
         self.errors.push(error);

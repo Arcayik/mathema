@@ -1,7 +1,9 @@
 use std::rc::Rc;
 
-use crate::context::Context;
-use crate::parse::{BinOp, ExprError, Expr, ExprBinary, ExprFnCall, ExprUnary, ExprValue, UnaryOp};
+use crate::{
+    context::Context,
+    expr::*,
+};
 
 #[derive(Debug)]
 pub enum FunctionError {

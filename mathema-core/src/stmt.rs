@@ -1,7 +1,7 @@
-use crate::{parse::{punctuated::Punctuated, token::{End, Paren}}, Token};
-use super::{
+use crate::{
+    punctuated::Punctuated,
     expr::Expr,
-    token::{Ident, Spanned, Parse, Span},
+    token::{Ident, Spanned, Parse, Span, End, Paren},
     parser::{ParseStream, ParseError}
 };
 

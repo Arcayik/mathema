@@ -1,53 +1,9 @@
-mod parse;
-mod diagnostic;
-
 use std::io::Write;
 
-use parse::{tokenize, parse_stmt, Stmt};
-use diagnostic::Diagnostic;
-
-use crate::{context::Context, parse::{create_function}};
-
-mod context {
-    use std::{collections::HashMap, f64::consts::{E, PI}, rc::Rc};
-
-    use crate::parse::Function;
-
-    pub struct Context {
-        variables: HashMap<Box<str>, f64>,
-        functions: HashMap<Box<str>, Rc<Function>>,
-    }
-
-    impl Default for Context {
-        fn default() -> Self {
-            let mut variables = HashMap::new();
-            variables.insert("pi".into(), PI);
-            variables.insert("e".into(), E);
-
-            let functions = HashMap::new();
-            Context { variables, functions }
-        }
-    }
-    
-    impl Context {
-        pub fn get_variable(&self, name: &str) -> Option<f64> {
-            self.variables.get(name).copied()
-        }
-
-        pub fn set_variable(&mut self, name: &str, value: f64) {
-            self.variables.insert(name.into(), value);
-        }
-
-        pub fn get_function(&self, name: &str) -> Option<Rc<Function>> {
-            self.functions.get(name).map(Rc::clone)
-        }
-
-        pub fn set_function(&mut self, name: &str, func: Function) {
-            // println!("Function '{}' declared", name);
-            self.functions.insert(name.into(), func.into());
-        }
-    }
-}
+use mathema_core::{
+    parsing::{tokenize, parse_stmt, Stmt},
+    Diagnostic, Context, create_function,
+};
 
 pub struct Prompt {
     prefix: String,
@@ -167,55 +123,3 @@ fn process_statement(ctxt: &mut Context, stmt: Stmt) -> Outcome {
     }
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn sum_product_precedence() {
-        assert!(parse_test("1 + 1"));
-        assert!(parse_test("1 + 3 * 5"));
-        assert!(parse_test("1 * 3 + 5"));
-    }
-
-    #[test]
-    fn unexpected_and_trailing() {
-        assert!(!parse_test("1 + +"));
-        assert!(!parse_test("1 + 3 * 5 var"));
-        assert!(!parse_test("1 / 3 x y"));
-        assert!(!parse_test("1 3 * 5 var"));
-    }
-
-    #[test]
-    fn simple_unary() {
-        assert!(parse_test("1 + -1"));
-        assert!(parse_test("-4 + -1"));
-        assert!(parse_test("--4 + -1"));
-    }
-
-    #[test]
-    fn parens() {
-        assert!(!parse_test("()"));
-        assert!(parse_test("(59.9)"));
-        assert!(parse_test("1 + (1)"));
-    }
-
-    #[test]
-    fn var_declaration() {
-        assert!(parse_test("x = 50"));
-    }
-
-    fn parse_test(input: &str) -> bool {
-        let input = String::from(input);
-        let (tokens, errors) = tokenize(&input);
-        if !errors.is_empty() {
-            errors.iter().for_each(|e| println!("{e}"));
-            return false;
-        } 
-
-        let ast = parse_stmt(tokens);
-        println!("Input: [{}]", input);
-        println!("AST: \n{:#?}", ast);
-        ast.is_ok()
-    }
-}

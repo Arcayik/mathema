@@ -1,10 +1,12 @@
 use std::cell::Cell;
 
-use crate::parse::{stmt::Stmt, token::{LexToken, Span, Spanned}};
+use crate::{
+    stmt::Stmt,
+    token::{Span, Spanned, Token, Parse},
+    lexer::LexToken
+};
 
-use super::*;
-
-pub type Result<T> = std::result::Result<T, ParseError>;
+type Result<T> = std::result::Result<T, ParseError>;
 
 #[derive(Debug)]
 pub struct ParseError {

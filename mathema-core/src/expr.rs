@@ -1,8 +1,17 @@
-use crate::{parse::{punctuated::Punctuated, stmt::parse_punctuated_group, token::{Delimiter, LexToken, Paren}}, Token};
-use super::{
-    token::{End, Ident, Literal, Parse, Span, Spanned, Token},
-    parser::{ParseStream, Result},
+use crate::{
+    punctuated::Punctuated,
+    stmt::parse_punctuated_group,
+    token::{Delimiter, Paren, End, Ident, Literal, Parse, Span, Spanned, Token},
+    lexer::LexToken,
+    parser::{ParseStream, ParseError},
+    context::Context,
 };
+
+#[derive(Debug)]
+pub enum ExprError {
+    UndefinedVar(Ident),
+    UndefinedFunc(Ident),
+}
 
 pub enum Expr {
     Value(ExprValue),
@@ -67,9 +76,21 @@ impl Spanned for Expr {
 }
 
 impl Parse for Expr {
-    fn parse(input: ParseStream) -> Result<Self> {
+    fn parse(input: ParseStream) -> Result<Self, ParseError> {
         let lhs = parsing::parse_expr_lhs(input)?;
         parsing::parse_expr(input, lhs, Precedence::MIN)
+    }
+}
+
+impl Expr {
+    pub fn eval(&self, ctxt: &Context) -> Result<f64, Vec<ExprError>> {
+        match self {
+            Self::Value(value) => value.eval(ctxt).map_err(|e| vec![e]),
+            Self::Binary(expr) => expr.eval(ctxt),
+            Self::Unary(expr) => expr.eval(ctxt),
+            Self::Group(group) => group.eval(ctxt),
+            Self::FnCall(call) => call.eval(ctxt),
+        }
     }
 }
 
@@ -97,13 +118,25 @@ impl Spanned for ExprValue {
 }
 
 impl Parse for ExprValue {
-    fn parse(input: ParseStream) -> Result<Self> {
+    fn parse(input: ParseStream) -> Result<Self, ParseError> {
         if input.peek::<Literal>() {
             input.parse().map(ExprValue::Literal)
         } else if input.peek::<Ident>() {
             input.parse().map(ExprValue::Ident)
         } else {
             Err(input.error("Expected literal or ident"))
+        }
+    }
+}
+
+impl ExprValue {
+    pub fn eval(&self, ctxt: &Context) -> Result<f64, ExprError> {
+        match self {
+            Self::Ident(ident) => {
+                ctxt.get_variable(&ident.repr)
+                    .ok_or_else(|| ExprError::UndefinedVar(ident.clone()))
+            }
+            Self::Literal(literal) => Ok(literal.num),
         }
     }
 }
@@ -129,12 +162,35 @@ impl Spanned for ExprBinary {
 }
 
 impl Parse for ExprBinary {
-    fn parse(input: ParseStream) -> Result<Self> {
+    fn parse(input: ParseStream) -> Result<Self, ParseError> {
         Ok(ExprBinary {
             lhs: Box::new(input.parse()?),
             op: input.parse()?,
             rhs: Box::new(input.parse()?),
         })
+    }
+}
+
+impl ExprBinary {
+    pub fn eval(&self, ctxt: &Context) -> Result<f64, Vec<ExprError>> {
+        let left = self.lhs.eval(ctxt);
+        let right = self.rhs.eval(ctxt);
+
+        match (left, right) {
+            (Ok(l), Ok(r)) => match self.op {
+                BinOp::Add(_) => Ok(l + r),
+                BinOp::Sub(_) => Ok(l - r),
+                BinOp::Mul(_) => Ok(l * r),
+                BinOp::Div(_) => Ok(l / r),
+            },
+
+            (Err(e), Ok(_)) | (Ok(_), Err(e)) => Err(e),
+
+            (Err(mut le), Err(mut re)) => {
+                le.append(&mut re);
+                Err(le)
+            }
+        }
     }
 }
 
@@ -168,7 +224,7 @@ impl Spanned for BinOp {
 }
 
 impl Parse for BinOp {
-    fn parse(input: ParseStream) -> Result<Self> {
+    fn parse(input: ParseStream) -> Result<Self, ParseError> {
         if input.peek::<Token![+]>() {
             input.parse().map(BinOp::Add)
         } else if input.peek::<Token![-]>() {
@@ -203,11 +259,24 @@ impl Spanned for ExprUnary {
 }
 
 impl Parse for ExprUnary {
-    fn parse(input: ParseStream) -> Result<Self> {
+    fn parse(input: ParseStream) -> Result<Self, ParseError> {
         Ok(ExprUnary {
             op: input.parse()?,
             expr: Box::new(parsing::parse_expr_lhs(input)?),
         })
+    }
+}
+
+impl ExprUnary {
+    pub fn eval(&self, ctxt: &Context) -> Result<f64, Vec<ExprError>> {
+        let right = self.expr.eval(ctxt);
+        if let Ok(r) = right {
+            match self.op {
+                UnaryOp::Neg(_) => Ok(-r),
+            }
+        } else {
+            right
+        }
     }
 }
 
@@ -232,7 +301,7 @@ impl Spanned for UnaryOp {
 }
 
 impl Parse for UnaryOp {
-    fn parse(input: ParseStream) -> Result<Self> {
+    fn parse(input: ParseStream) -> Result<Self, ParseError> {
         if input.peek::<Token![-]>() {
             input.parse().map(UnaryOp::Neg)
         } else {
@@ -259,7 +328,7 @@ impl Spanned for ExprGroup {
 }
 
 impl Parse for ExprGroup {
-    fn parse(input: ParseStream) -> Result<Self> {
+    fn parse(input: ParseStream) -> Result<Self, ParseError> {
         if let LexToken::Group(g, _) = input.next_token() {
             Ok(ExprGroup {
                 delim: g.delim,
@@ -268,6 +337,12 @@ impl Parse for ExprGroup {
         } else {
             Err(input.error("Expected group"))
         }
+    }
+}
+
+impl ExprGroup {
+    pub fn eval(&self, ctxt: &Context) -> Result<f64, Vec<ExprError>> {
+        self.expr.eval(ctxt)
     }
 }
 
@@ -316,7 +391,7 @@ impl Spanned for ExprFnCall {
 }
 
 impl Parse for ExprFnCall {
-    fn parse(input: ParseStream) -> Result<Self> {
+    fn parse(input: ParseStream) -> Result<Self, ParseError> {
         let name = input.parse()?;
         let parens = input.parse()?;
         Ok(ExprFnCall {
@@ -327,12 +402,29 @@ impl Parse for ExprFnCall {
     }
 }
 
+impl ExprFnCall {
+    pub fn eval(&self, ctxt: &Context) -> Result<f64, Vec<ExprError>> {
+        let name = &self.name.repr;
+        let func = ctxt.get_function(name)
+            .ok_or(vec![ExprError::UndefinedFunc(self.name.clone())])?;
+
+        let mut arg_exprs = Vec::new();
+        for expr in self.inputs.iter() {
+            arg_exprs.push(expr.eval(ctxt)?);
+        };
+
+        let call = func.call(&arg_exprs);
+
+        Ok(call)
+    }
+}
+
 mod parsing {
-    use crate::parse::token::Paren;
+    use crate::token::Paren;
 
     use super::*;
 
-    pub fn parse_expr_lhs(input: ParseStream) -> Result<Expr> {
+    pub fn parse_expr_lhs(input: ParseStream) -> Result<Expr, ParseError> {
         if input.peek::<Token![-]>() {
             input.parse().map(Expr::Unary)
         } else if input.peek::<Ident>() && input.peek2::<Paren>() {
@@ -350,7 +442,7 @@ mod parsing {
         input: ParseStream,
         mut left: Expr,
         base: Precedence
-    ) -> Result<Expr> {
+    ) -> Result<Expr, ParseError> {
         loop {
             // NOTE: point of interest
             if input.peek::<End>() {
@@ -387,7 +479,7 @@ mod parsing {
     fn parse_binop_rhs(
         input: ParseStream,
         precedence: Precedence,
-    ) -> Result<Box<Expr>> {
+    ) -> Result<Box<Expr>, ParseError> {
         let mut rhs = parse_expr_lhs(input)?;
         loop {
             let begin = input.save_pos();

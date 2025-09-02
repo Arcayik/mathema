@@ -1,6 +1,27 @@
-use crate::parse::token::*;
+use crate::token::*;
 
-use super::token::Span;
+#[derive(Debug, Clone)]
+pub enum LexToken {
+    Literal(Literal),
+    Ident(Ident),
+    Punct(Punct),
+    Group(Group, usize),
+    End(isize)
+}
+
+impl std::fmt::Display for LexToken {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let str = match self {
+            LexToken::Literal(_) => Literal::display(),
+            LexToken::Ident(i) => i.repr.as_ref(),
+            LexToken::Punct(p) => p.repr.as_ref(),
+            LexToken::Group(g, o) => &format!("{:?}({})", g.delim, o),
+            LexToken::End(o) => &format!("end({})", o),
+
+        };
+        write!(f, "{}", str)
+    }
+}
 
 #[derive(Clone, Debug)]
 pub enum LexError {

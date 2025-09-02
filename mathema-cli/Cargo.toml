@@ -1,0 +1,10 @@
+[package]
+name = "mathema-cli"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+mathema-core = { path = "../mathema-core/" }
+
+[[bin]]
+name = "mathema-cli"

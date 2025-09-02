@@ -1,4 +1,6 @@
-use crate::parse::{Span, Spanned};
+use crate::{
+    token::{Span, Spanned}
+};
 
 #[derive(Debug)]
 pub struct Punctuated<T, S> {

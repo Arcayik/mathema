@@ -1,4 +1,10 @@
-use crate::parse::{ExprError, FunctionError, LexError, ParseError, Span, Spanned};
+use crate::{
+    token::{Span, Spanned},
+    lexer::LexError,
+    parser::ParseError,
+    expr::ExprError,
+    function::FunctionError,
+};
 
 #[derive(Debug)]
 pub struct Diagnostic {

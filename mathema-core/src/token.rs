@@ -117,8 +117,9 @@ macro_rules! Token {
     [-] => { $crate::token::Minus };
     [*] => { $crate::token::Star };
     [/] => { $crate::token::Slash };
+    [^] => { $crate::token::Caret };
     [=] => { $crate::token::Equals };
-    [,] => { $crate::token::Comma }
+    [,] => { $crate::token::Comma };
 }
 
 define_punctuation! {
@@ -126,6 +127,7 @@ define_punctuation! {
     "-"     pub struct Minus
     "*"     pub struct Star
     "/"     pub struct Slash
+    "^"     pub struct Caret
     "="     pub struct Equals
     ","     pub struct Comma
 }

@@ -173,23 +173,21 @@ impl Parse for ExprBinary {
 
 impl ExprBinary {
     pub fn eval(&self, ctxt: &Context) -> Result<f64, Vec<ExprError>> {
-        let left = self.lhs.eval(ctxt);
-        let right = self.rhs.eval(ctxt);
+        let mut errors = Vec::new();
 
-        match (left, right) {
-            (Ok(l), Ok(r)) => match self.op {
+        let left = self.lhs.eval(ctxt).map_err(|mut e| errors.append(&mut e));
+        let right = self.rhs.eval(ctxt).map_err(|mut e| errors.append(&mut e));
+
+        if let (Ok(l), Ok(r)) = (left, right) {
+            match self.op {
                 BinOp::Add(_) => Ok(l + r),
                 BinOp::Sub(_) => Ok(l - r),
                 BinOp::Mul(_) => Ok(l * r),
                 BinOp::Div(_) => Ok(l / r),
-            },
-
-            (Err(e), Ok(_)) | (Ok(_), Err(e)) => Err(e),
-
-            (Err(mut le), Err(mut re)) => {
-                le.append(&mut re);
-                Err(le)
+                BinOp::Exp(_) => Ok(l.powf(r))
             }
+        } else {
+            Err(errors)
         }
     }
 }
@@ -199,6 +197,7 @@ pub enum BinOp {
     Sub(Token![-]),
     Mul(Token![*]),
     Div(Token![/]),
+    Exp(Token![^])
 }
 
 impl std::fmt::Debug for BinOp {
@@ -208,6 +207,7 @@ impl std::fmt::Debug for BinOp {
             Self::Sub(_) => write!(f, "{}", <Token![-]>::display()),
             Self::Mul(_) => write!(f, "{}", <Token![*]>::display()),
             Self::Div(_) => write!(f, "{}", <Token![/]>::display()),
+            Self::Exp(_) => write!(f, "{}", <Token![^]>::display()),
         }
     }
 }
@@ -219,6 +219,7 @@ impl Spanned for BinOp {
             Self::Sub(t) => t.span(),
             Self::Mul(t) => t.span(),
             Self::Div(t) => t.span(),
+            Self::Exp(t) => t.span(),
         }
     }
 }
@@ -233,6 +234,8 @@ impl Parse for BinOp {
             input.parse().map(BinOp::Mul)
         } else if input.peek::<Token![/]>() {
             input.parse().map(BinOp::Div)
+        } else if input.peek::<Token![^]>() {
+            input.parse().map(BinOp::Exp)
         } else {
             Err(input.error("Expected binary operator"))
         }
@@ -349,7 +352,7 @@ impl ExprGroup {
 }
 
 #[derive(PartialEq, PartialOrd)]
-pub enum Precedence { Assign, Sum, Product, Unary, Unambiguous }
+pub enum Precedence { Assign, Sum, Product, Unary, Exponent, Unambiguous }
 
 impl Precedence {
     pub(crate) const MIN: Self = Precedence::Assign;
@@ -357,7 +360,8 @@ impl Precedence {
     pub fn of_binop(op: &BinOp) -> Self {
         match op {
             BinOp::Add(_) | BinOp::Sub(_) => Precedence::Sum,
-            BinOp::Mul(_) | BinOp::Div(_) => Precedence::Product
+            BinOp::Mul(_) | BinOp::Div(_) => Precedence::Product,
+            BinOp::Exp(_) => Precedence::Exponent
         }
     }
 
@@ -473,8 +477,11 @@ mod parsing {
     }
 
     fn peek_binop(input: ParseStream) -> bool {
-        input.peek::<Token![+]>() || input.peek::<Token![-]>() ||
-            input.peek::<Token![*]>() || input.peek::<Token![/]>()
+        input.peek::<Token![+]>() ||
+            input.peek::<Token![-]>() ||
+            input.peek::<Token![*]>() ||
+            input.peek::<Token![/]>() ||
+            input.peek::<Token![^]>()
     }
 
     fn parse_binop_rhs(
@@ -486,7 +493,10 @@ mod parsing {
             let begin = input.save_pos();
             let next = peek_precedence(input);
 
-            if next > precedence {
+            // if right assoc: next can be of equal precedence
+            if (peek_is_left_assoc(input) && next > precedence) ||
+                (!peek_is_left_assoc(input) && next >= precedence)
+            {
                 rhs = parse_expr(input, rhs, next)?;
             } else {
                 input.restore_pos(begin);
@@ -509,5 +519,21 @@ mod parsing {
 
         input.restore_pos(begin);
         precedence
+    }
+
+    fn peek_is_left_assoc(input: ParseStream) -> bool {
+        let begin = input.save_pos();
+
+        let assoc = if let Ok(op) = input.parse() {
+            match op {
+                BinOp::Exp(_) => false,
+                _ => true,
+            }
+        } else {
+            true
+        };
+
+        input.restore_pos(begin);
+        assoc
     }
 }

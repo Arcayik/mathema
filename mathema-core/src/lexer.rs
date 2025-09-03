@@ -85,7 +85,7 @@ impl<'s> Tokenizer<'s> {
                     self.lexer.next();
                 },
 
-                '+' | '-' | '*' | '/' | '=' | ',' => {
+                '+' | '-' | '*' | '/' | '^' | '=' | ',' => {
                     return Some(self.punct())
                 },
 

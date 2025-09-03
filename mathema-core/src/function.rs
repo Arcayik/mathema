@@ -196,16 +196,18 @@ impl BinaryNode {
     fn eval(&self, args: &[f64]) -> f64 {
         let left = self.left.eval(args);
         let right = self.right.eval(args);
+
         match self.op {
             BinaryOperation::Add => left + right,
             BinaryOperation::Sub => left - right,
             BinaryOperation::Mul => left * right,
             BinaryOperation::Div => left / right,
+            BinaryOperation::Exp => left.powf(right),
         }
     }
 }
 
-pub enum BinaryOperation { Add, Sub, Mul, Div }
+pub enum BinaryOperation { Add, Sub, Mul, Div, Exp }
 
 impl From<BinOp> for BinaryOperation {
     fn from(value: BinOp) -> Self {
@@ -214,6 +216,7 @@ impl From<BinOp> for BinaryOperation {
             BinOp::Sub(_) => Self::Sub,
             BinOp::Mul(_) => Self::Mul,
             BinOp::Div(_) => Self::Div,
+            BinOp::Exp(_) => Self::Exp,
         }
     }
 }

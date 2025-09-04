@@ -1,15 +1,11 @@
 use crate::{
-    token::{Span, Spanned},
-    lexer::LexError,
-    parser::ParseError,
-    expr::ExprError,
-    function::FunctionError,
+    expr::ExprError, function::FunctionError, lexer::LexError, parser::ParseError, token::{Span, Spanned}
 };
 
 #[derive(Debug)]
 pub struct Diagnostic {
-    msg: String,
-    spans: Vec<Span>
+    pub(crate) msg: String,
+    pub(crate) spans: Vec<Span>
 }
 
 impl std::fmt::Display for Diagnostic {

@@ -1,8 +1,8 @@
 use std::io::Write;
 
 use mathema_core::{
-    parsing::{ParseBuffer, tokenize, Stmt},
-    Diagnostic, Context, Outcome, create_function,
+    parsing::{tokenize, ParseBuffer, Stmt},
+    Context, Diagnostic, Outcome, process_statement
 };
 
 pub struct Prompt {
@@ -76,49 +76,5 @@ fn parse_ast<T: ToString>(input: T) -> Result<Stmt, Vec<Diagnostic>> {
     };
 
     statement
-}
-
-fn process_statement(ctxt: &mut Context, stmt: Stmt) -> Outcome {
-    match stmt {
-        Stmt::Expr(expr) => {
-            let result = expr.eval(ctxt).map_err(Diagnostic::from_vec);
-            match result {
-                Ok(num) => {
-                    ctxt.set_variable("ans".into(), num);
-                    Outcome::ShowAnswer(num)
-                },
-                Err(diags) => Outcome::ShowDiagnostics(diags)
-            }
-        },
-        Stmt::VarDecl(var_decl) => {
-            let name = var_decl.var_name.repr;
-            match var_decl.expr.eval(ctxt) {
-                Ok(ans) => {
-                    ctxt.set_variable(name.clone(), ans);
-                    Outcome::AssignVar(name, ans)
-                }
-                Err(e) => Outcome::ShowDiagnostics(Diagnostic::from_vec(e))
-            }
-        }
-        Stmt::FnDecl(fn_decl) => {
-            let name = fn_decl.sig.fn_name.repr;
-            let body = fn_decl.body;
-            let params: Box<_> = fn_decl.sig.inputs
-                .iter()
-                .cloned()
-                .map(|p| p.repr)
-                .collect();
-
-            let result = create_function(name.clone(), params, body, ctxt)
-                .map_err(Diagnostic::from);
-            match result {
-                Ok(f) => {
-                    ctxt.set_function(name.clone(), f);
-                    Outcome::DefineFn(name)
-                },
-                Err(d) => Outcome::ShowDiagnostics(vec![d])
-            }
-        }
-    }
 }
 

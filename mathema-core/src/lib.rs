@@ -5,6 +5,7 @@ mod parser;
 mod stmt;
 mod expr;
 mod punctuated;
+mod intrinsics;
 
 mod function;
 mod context;
@@ -19,7 +20,7 @@ pub mod parsing {
 }
 
 pub use function::{Function, FunctionError, create_function};
-pub use context::{Context, Outcome};
+pub use context::{Context, Outcome, process_statement};
 pub use diagnostic::Diagnostic;
 
 #[cfg(test)]

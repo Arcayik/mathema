@@ -5,8 +5,8 @@ use std::{
 
 use crate::{
     diagnostic::Diagnostic,
-    function::{Function, create_function},
-    intrinsics::{self, declare_constants},
+    function::{create_function, Function},
+    intrinsics::{self, declare_constants, declare_functions}, token::Spanned,
 };
 
 pub struct Context {
@@ -17,7 +17,7 @@ pub struct Context {
 impl Default for Context {
     fn default() -> Self {
         let variables = declare_constants();
-        let functions = HashMap::new();
+        let functions = declare_functions();
         Context { variables, functions }
     }
 }
@@ -80,20 +80,28 @@ pub fn process_statement(ctxt: &mut Context, stmt: Stmt) -> Outcome {
             }
         }
         Stmt::FnDecl(fn_decl) => {
-            let name = fn_decl.sig.fn_name.repr;
+            let name = fn_decl.sig.fn_name.repr.clone().into_string();
             let body = fn_decl.body;
-            let params: Box<_> = fn_decl.sig.inputs
+            let params: Vec<_> = fn_decl.sig.inputs
                 .iter()
                 .cloned()
-                .map(|p| p.repr)
+                .map(|p| p.repr.into_string())
                 .collect();
 
             let result = create_function(name.clone(), params, body, ctxt)
                 .map_err(Diagnostic::from);
             match result {
                 Ok(f) => {
-                    ctxt.set_function(name.clone(), f);
-                    Outcome::DefineFn(name)
+                    if intrinsics::BUILTIN_FUNCS.contains(&name.as_ref()) {
+                        let diag = Diagnostic {
+                            msg: format!("Cannot redefine built-in function '{name}'"),
+                            spans: vec![fn_decl.sig.fn_name.span()],
+                        };
+                        Outcome::ShowDiagnostics(vec![diag])
+                    } else {
+                        ctxt.set_function(name.clone().into(), f);
+                        Outcome::DefineFn(name.into())
+                    }
                 },
                 Err(d) => Outcome::ShowDiagnostics(vec![d])
             }

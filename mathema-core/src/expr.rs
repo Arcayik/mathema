@@ -525,10 +525,7 @@ mod parsing {
         let begin = input.save_pos();
 
         let assoc = if let Ok(op) = input.parse() {
-            match op {
-                BinOp::Exp(_) => false,
-                _ => true,
-            }
+            !matches!(op, BinOp::Exp(_))
         } else {
             true
         };

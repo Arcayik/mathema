@@ -18,13 +18,13 @@ impl From<ExprError> for FunctionError {
 }
 
 struct FunctionBuilder<'c> {
-    fn_name: Box<str>,
-    params: Box<[Box<str>]>,
+    fn_name: String,
+    params: Vec<String>,
     context: &'c Context,
 }
 
 impl<'c> FunctionBuilder<'c> {
-    fn new(fn_name: Box<str>, params: Box<[Box<str>]>, context: &'c Context) -> Self {
+    fn new(fn_name: String, params: Vec<String>, context: &'c Context) -> Self {
         FunctionBuilder { fn_name, params, context }
     }
 
@@ -50,7 +50,7 @@ impl<'c> FunctionBuilder<'c> {
             ExprValue::Ident(id) => {
                 let name = &id.repr;
                 // check if it is a function parameter
-                if let Some(idx) = self.params.iter().position(|p| p == name) {
+                if let Some(idx) = self.params.iter().position(|p| **p == **name) {
                     return Ok(ValueNode::Param(ParamNode { idx }))
                 } 
 
@@ -80,7 +80,7 @@ impl<'c> FunctionBuilder<'c> {
 
     fn convert_fn_call(&self, fn_call: ExprFnCall) -> Result<FnCallNode, FunctionError> {
         // naive recursion check
-        if fn_call.name.repr == self.fn_name {
+        if *fn_call.name.repr == *self.fn_name {
             return Err(FunctionError::Recursion(fn_call))
         }
 
@@ -98,39 +98,101 @@ impl<'c> FunctionBuilder<'c> {
     }
 }
 
+#[derive(Debug)]
 pub struct Function {
-    pub(crate) name: Box<str>,
-    pub(crate) params: Box<[Box<str>]>,
-    pub(crate) ast: Box<AlgebraTree>
+    inner: FunctionInner
 }
 
 impl Function {
-    pub fn new(name: Box<str>, params: Box<[Box<str>]>, ast: AlgebraTree) -> Self {
-        let ast = Box::new(ast);
-        Function { name, params, ast }
+    pub fn new(name: String, params: Vec<String>, ast: AlgebraTree) -> Self {
+        Function { inner: FunctionInner::new_user_defined(name, params, ast) }
+    }
+
+    pub(crate) const fn new_builtin(name: &'static str, params: &'static [&'static str], body: fn(&[f64]) -> f64) -> Self {
+        Function { inner: FunctionInner::new_builtin(name, params, body) }
     }
 
     pub fn name(&self) -> &str {
-        &self.name
+        self.inner.name()
     }
 
-    pub fn params(&self) -> &[Box<str>] {
-        &self.params
+    pub fn params(&self) -> Box<[&str]> {
+        self.inner.params()
     }
 
     pub fn num_params(&self) -> usize {
-        self.params.len()
+        self.inner.num_params()
     }
 
     pub fn call(&self, args: &[f64]) -> f64 {
         assert_eq!(args.len(), self.num_params());
 
         let mut fn_args = Vec::new();
-        for (idx, param) in self.params.iter().enumerate() {
-            fn_args.push((param.as_ref(), args[idx]));
+        for (idx, param) in self.inner.params().into_iter().enumerate() {
+            fn_args.push((param, args[idx]));
         }
 
-        self.ast.eval(args)
+        self.inner.call(args)
+    }
+}
+
+#[derive(Debug)]
+enum FunctionInner {
+    UserDefined {
+        name: String,
+        params: Vec<String>,
+        body: Box<AlgebraTree>,
+    },
+    Builtin {
+        name: &'static str,
+        params: &'static [&'static str],
+        body: fn(&[f64]) -> f64,
+    }
+}
+
+impl FunctionInner {
+    fn new_user_defined(name: String, params: Vec<String>, ast: AlgebraTree) -> Self {
+        let body = Box::new(ast);
+        FunctionInner::UserDefined { name, params, body }
+    }
+
+    const fn new_builtin(name: &'static str, params: &'static [&'static str], body: fn(&[f64]) -> f64) -> Self {
+        FunctionInner::Builtin { name, params, body }
+    }
+
+    fn name(&self) -> &str {
+        match self {
+            Self::UserDefined { name, .. } => name,
+            Self::Builtin { name, .. } => name
+        }
+    }
+
+    fn params(&self) -> Box<[&str]> {
+        match self {
+            Self::UserDefined { params, .. } => params.iter().map(|s| &s[..]).collect(),
+            Self::Builtin { params, .. } => params.to_owned().into()
+        }
+    }
+
+    fn num_params(&self) -> usize {
+        match self {
+            Self::UserDefined { params, .. } => params.len(),
+            Self::Builtin { params, .. } => params.len(),
+        }
+    }
+
+    fn call(&self, args: &[f64]) -> f64 {
+        assert_eq!(args.len(), self.num_params());
+
+        let mut fn_args = Vec::new();
+        for (idx, param) in self.params().into_iter().enumerate() {
+            fn_args.push((param, args[idx]));
+        }
+
+        match self {
+            FunctionInner::UserDefined { body, .. } => body.eval(args),
+            FunctionInner::Builtin { body, .. } => body(args),
+        }
     }
 }
 
@@ -139,6 +201,12 @@ pub enum AlgebraTree {
     Binary(BinaryNode),
     Unary(UnaryNode),
     FnCall(FnCallNode),
+}
+
+impl std::fmt::Debug for AlgebraTree {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "AlgebraTree {{ ... }}")
+    }
 }
 
 impl AlgebraTree {
@@ -268,8 +336,8 @@ impl FnCallNode {
 }
 
 pub fn create_function(
-    name: Box<str>,
-    params: Box<[Box<str>]>,
+    name: String,
+    params: Vec<String>,
     expr: Expr,
     ctxt: &Context
 ) -> Result<Function, FunctionError> {

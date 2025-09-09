@@ -7,6 +7,7 @@ mod expr;
 mod punctuated;
 mod intrinsics;
 
+mod algebra;
 mod function;
 mod context;
 mod diagnostic;

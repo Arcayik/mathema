@@ -1,6 +1,7 @@
 use std::rc::Rc;
 
 use crate::{
+    algebra::*,
     context::Context,
     expr::*,
 };
@@ -65,9 +66,9 @@ impl<'c> FunctionBuilder<'c> {
 
     fn convert_binary(&self, binary: ExprBinary) -> Result<BinaryNode, FunctionError> {
         Ok(BinaryNode {
-            left: Box::new(self.convert_algebra_tree(*binary.lhs)?),
+            left: Rc::new(self.convert_algebra_tree(*binary.lhs)?),
             op: binary.op.into(),
-            right: Box::new(self.convert_algebra_tree(*binary.rhs)?)
+            right: Rc::new(self.convert_algebra_tree(*binary.rhs)?)
         })
     }
 
@@ -98,7 +99,7 @@ impl<'c> FunctionBuilder<'c> {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq)]
 pub struct Function {
     inner: FunctionInner
 }
@@ -150,6 +151,12 @@ enum FunctionInner {
     }
 }
 
+impl PartialEq for FunctionInner {
+    fn eq(&self, other: &Self) -> bool {
+        self.name() == other.name() && self.params() == other.params()
+    }
+}
+
 impl FunctionInner {
     fn new_user_defined(name: String, params: Vec<String>, ast: AlgebraTree) -> Self {
         let body = Box::new(ast);
@@ -193,145 +200,6 @@ impl FunctionInner {
             FunctionInner::UserDefined { body, .. } => body.eval(args),
             FunctionInner::Builtin { body, .. } => body(args),
         }
-    }
-}
-
-pub enum AlgebraTree {
-    Value(ValueNode),
-    Binary(BinaryNode),
-    Unary(UnaryNode),
-    FnCall(FnCallNode),
-}
-
-impl std::fmt::Debug for AlgebraTree {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "AlgebraTree {{ ... }}")
-    }
-}
-
-impl AlgebraTree {
-    fn eval(&self, args: &[f64]) -> f64 {
-        match self {
-            Self::Value(v) => v.eval(args),
-            Self::Binary(b) => b.eval(args),
-            Self::Unary(u) => u.eval(args),
-            Self::FnCall(f) => f.eval(args),
-        }
-    }
-}
-
-pub struct NumNode {
-    value: f64
-}
-
-impl NumNode {
-    pub fn eval(&self) -> f64 {
-        self.value
-    }
-}
-
-pub struct ParamNode {
-    idx: usize
-}
-
-impl ParamNode {
-    fn eval(&self, args: &[f64]) -> f64 {
-        args[self.idx]
-    }
-}
-
-pub enum ValueNode {
-    Num(NumNode),
-    Param(ParamNode),
-}
-
-impl ValueNode {
-    fn eval(&self, args: &[f64]) -> f64 {
-        match self {
-            Self::Num(n) => n.eval(),
-            Self::Param(p) => p.eval(args),
-        }
-    }
-}
-
-pub struct BinaryNode {
-    left: Box<AlgebraTree>,
-    op: BinaryOperation,
-    right: Box<AlgebraTree>,
-}
-
-impl BinaryNode {
-    fn eval(&self, args: &[f64]) -> f64 {
-        let left = self.left.eval(args);
-        let right = self.right.eval(args);
-
-        match self.op {
-            BinaryOperation::Add => left + right,
-            BinaryOperation::Sub => left - right,
-            BinaryOperation::Mul => left * right,
-            BinaryOperation::Div => left / right,
-            BinaryOperation::Exp => left.powf(right),
-        }
-    }
-}
-
-pub enum BinaryOperation { Add, Sub, Mul, Div, Exp }
-
-impl From<BinOp> for BinaryOperation {
-    fn from(value: BinOp) -> Self {
-        match value {
-            BinOp::Add(_) => Self::Add,
-            BinOp::Sub(_) => Self::Sub,
-            BinOp::Mul(_) => Self::Mul,
-            BinOp::Div(_) => Self::Div,
-            BinOp::Exp(_) => Self::Exp,
-        }
-    }
-}
-
-pub struct UnaryNode {
-    op: UnaryOperation,
-    tree: Box<AlgebraTree>,
-}
-
-impl UnaryNode {
-    fn eval(&self, args: &[f64]) -> f64 {
-        let inner_tree = self.tree.as_ref();
-        let value = inner_tree.eval(args);
-        match self.op {
-            UnaryOperation::Neg => - value,
-        }
-    }
-}
-
-pub enum UnaryOperation { Neg }
-
-impl From<UnaryOp> for UnaryOperation {
-    fn from(value: UnaryOp) -> Self {
-        match value {
-            UnaryOp::Neg(_) => UnaryOperation::Neg,
-        }
-    }
-}
-
-pub struct FnCallNode {
-    args: Box<[AlgebraTree]>,
-    func: Rc<Function>
-}
-
-impl FnCallNode {
-    fn eval_arg_exprs(&self, args: &[f64]) -> Vec<f64> {
-        let eval_results = self.args
-            .iter()
-            .map(|a| AlgebraTree::eval(a, args))
-            .collect();
-
-        eval_results
-    }
-
-    fn eval(&self, args: &[f64]) -> f64 {
-        let args = self.eval_arg_exprs(args);
-        self.func.call(&args)
     }
 }
 

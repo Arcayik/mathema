@@ -9,33 +9,40 @@ use crate::{
     intrinsics::{self, declare_constants, declare_functions}, token::Spanned,
 };
 
-pub struct Context {
+pub trait Context {
+    fn set_variable(&mut self, name: Box<str>, value: f64);
+    fn get_variable(&self, name: &str) -> Option<f64>;
+    fn set_function(&mut self, name: Box<str>, func: Function);
+    fn get_function(&self, name: &str) -> Option<Rc<Function>>;
+}
+
+pub struct ScopeContext {
     variables: HashMap<Box<str>, f64>,
     functions: HashMap<Box<str>, Rc<Function>>,
 }
 
-impl Default for Context {
+impl Default for ScopeContext {
     fn default() -> Self {
         let variables = declare_constants();
         let functions = declare_functions();
-        Context { variables, functions }
+        ScopeContext { variables, functions }
     }
 }
 
-impl Context {
-    pub fn get_variable(&self, name: &str) -> Option<f64> {
+impl Context for ScopeContext {
+    fn get_variable(&self, name: &str) -> Option<f64> {
         self.variables.get(name).copied()
     }
 
-    pub fn set_variable(&mut self, name: Box<str>, value: f64) {
+    fn set_variable(&mut self, name: Box<str>, value: f64) {
         self.variables.insert(name, value);
     }
 
-    pub fn get_function(&self, name: &str) -> Option<Rc<Function>> {
+    fn get_function(&self, name: &str) -> Option<Rc<Function>> {
         self.functions.get(name).map(Rc::clone)
     }
 
-    pub fn set_function(&mut self, name: Box<str>, func: Function) {
+    fn set_function(&mut self, name: Box<str>, func: Function) {
         self.functions.insert(name, func.into());
     }
 }

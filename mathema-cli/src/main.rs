@@ -2,8 +2,13 @@ use std::io::Write;
 
 use mathema_core::{
     parsing::{tokenize, ParseBuffer, Stmt},
-    Context, Diagnostic, Outcome, process_statement
 };
+
+mod context;
+mod diagnostic;
+
+use context::{ScopeContext, Outcome, process_statement};
+use diagnostic::Diagnostic;
 
 pub struct Prompt {
     prefix: String,
@@ -37,7 +42,7 @@ impl Prompt {
 }
 
 fn main() {
-    let mut context = Context::default();
+    let mut context = ScopeContext::default();
     let prompt = Prompt::new(">> ".to_string());
 
     loop {

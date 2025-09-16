@@ -1,5 +1,6 @@
-use crate::{
-    expr::ExprError, function::FunctionError, lexer::LexError, parser::ParseError, token::{Span, Spanned}
+use mathema_core::{
+    parsing::{LexError, ExprError, ParseError, Span, Spanned},
+    function::FunctionError
 };
 
 #[derive(Debug)]

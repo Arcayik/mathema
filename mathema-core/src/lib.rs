@@ -5,24 +5,19 @@ mod parser;
 mod stmt;
 mod expr;
 mod punctuated;
-mod intrinsics;
 
-mod algebra;
-mod function;
-mod context;
-mod diagnostic;
+pub mod algebra;
+pub mod function;
+pub mod context;
+pub mod intrinsics;
 
 pub mod parsing {
     pub use crate::token::{Span, Spanned, Token, Parse};
-    pub use crate::lexer::tokenize;
+    pub use crate::lexer::{LexError, tokenize};
     pub use crate::parser::{ParseBuffer, ParseError, ParseStream};
-    pub use crate::expr::{BinOp, Expr, ExprBinary, ExprUnary, ExprValue, ExprFnCall, ExprGroup, Precedence, UnaryOp};
+    pub use crate::expr::{ExprError, BinOp, Expr, ExprBinary, ExprUnary, ExprValue, ExprFnCall, ExprGroup, Precedence, UnaryOp};
     pub use crate::stmt::Stmt;
 }
-
-pub use function::{Function, FunctionError, create_function};
-pub use context::{Context, Outcome, process_statement};
-pub use diagnostic::Diagnostic;
 
 #[cfg(test)]
 mod tests {

@@ -1,18 +1,16 @@
 macro_rules! define_constants {
     ( $( $name:ident = $def:expr ;)* ) => {
-        pub(crate) const BUILTIN_VARS: &[&'static str] = &[
+        pub const BUILTIN_VARS: &[&'static str] = &[
             "ans",
             $(
                 stringify!($name),
             )*
         ];
 
-        pub(crate) fn declare_constants() -> std::collections::HashMap<Box<str>, f64> {
-            let mut map = std::collections::HashMap::new();
+        pub(crate) fn declare_constants(ctxt: &mut dyn $crate::context::Context) {
             $(
-                let _ = map.insert(stringify!($name).into(), $def);
+                let _ = ctxt.set_variable(stringify!($name).into(), $def);
             )*
-            map
         }
     }
 }
@@ -29,22 +27,20 @@ macro_rules! declare_functions {
 
         $(
             #[expect(non_upper_case_globals)]
-            const $name: Function = Function::new_builtin(
+            pub const $name: Function = Function::new_builtin(
                 stringify!($name),
                 &[ $( stringify!($args) ),* ],
                 $body
             );
         )*
 
-            pub(crate) fn declare_functions() -> std::collections::HashMap<Box<str>, std::rc::Rc<Function>> {
-                let mut map = std::collections::HashMap::new();
+            pub(crate) fn declare_functions(ctxt: &mut dyn $crate::context::Context) {
                 $(
-                    map.insert(
+                    ctxt.set_function(
                         stringify!($name).into(),
                         $name.into()
                     )
                 );*;
-                map
             }
     };
 }

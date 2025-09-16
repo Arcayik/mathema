@@ -83,7 +83,7 @@ impl Parse for Expr {
 }
 
 impl Expr {
-    pub fn eval(&self, ctxt: &Context) -> Result<f64, Vec<ExprError>> {
+    pub fn eval(&self, ctxt: &dyn Context) -> Result<f64, Vec<ExprError>> {
         match self {
             Self::Value(value) => value.eval(ctxt).map_err(|e| vec![e]),
             Self::Binary(expr) => expr.eval(ctxt),
@@ -130,7 +130,7 @@ impl Parse for ExprValue {
 }
 
 impl ExprValue {
-    pub fn eval(&self, ctxt: &Context) -> Result<f64, ExprError> {
+    pub fn eval(&self, ctxt: &dyn Context) -> Result<f64, ExprError> {
         match self {
             Self::Ident(ident) => {
                 ctxt.get_variable(&ident.repr)
@@ -172,7 +172,7 @@ impl Parse for ExprBinary {
 }
 
 impl ExprBinary {
-    pub fn eval(&self, ctxt: &Context) -> Result<f64, Vec<ExprError>> {
+    pub fn eval(&self, ctxt: &dyn Context) -> Result<f64, Vec<ExprError>> {
         let mut errors = Vec::new();
 
         let left = self.lhs.eval(ctxt).map_err(|mut e| errors.append(&mut e));
@@ -192,6 +192,7 @@ impl ExprBinary {
     }
 }
 
+#[derive(Clone)]
 pub enum BinOp {
     Add(Token![+]),
     Sub(Token![-]),
@@ -271,7 +272,7 @@ impl Parse for ExprUnary {
 }
 
 impl ExprUnary {
-    pub fn eval(&self, ctxt: &Context) -> Result<f64, Vec<ExprError>> {
+    pub fn eval(&self, ctxt: &dyn Context) -> Result<f64, Vec<ExprError>> {
         let right = self.expr.eval(ctxt);
         if let Ok(r) = right {
             match self.op {
@@ -283,6 +284,7 @@ impl ExprUnary {
     }
 }
 
+#[derive(Clone)]
 pub enum UnaryOp {
     Neg(Token![-])
 }
@@ -346,7 +348,7 @@ impl Parse for ExprGroup {
 }
 
 impl ExprGroup {
-    pub fn eval(&self, ctxt: &Context) -> Result<f64, Vec<ExprError>> {
+    pub fn eval(&self, ctxt: &dyn Context) -> Result<f64, Vec<ExprError>> {
         self.expr.eval(ctxt)
     }
 }
@@ -409,7 +411,7 @@ impl Parse for ExprFnCall {
 }
 
 impl ExprFnCall {
-    pub fn eval(&self, ctxt: &Context) -> Result<f64, Vec<ExprError>> {
+    pub fn eval(&self, ctxt: &dyn Context) -> Result<f64, Vec<ExprError>> {
         let name = &self.name.repr;
         let func = ctxt.get_function(name)
             .ok_or(vec![ExprError::UndefinedFunc(self.name.clone())])?;

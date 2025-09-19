@@ -1,16 +1,12 @@
 use crate::{
-    punctuated::Punctuated,
-    stmt::parse_punctuated_group,
-    token::{Delimiter, Paren, End, Ident, Literal, Parse, Span, Spanned, Token},
-    lexer::LexToken,
-    parser::{ParseStream, ParseError},
-    context::Context,
+    lexer::LexToken, parser::{ParseError, ParseStream}, punctuated::Punctuated, stmt::parse_punctuated_group, token::{Delimiter, End, Ident, Literal, Paren, Parse, Span, Spanned, Token}
 };
 
 #[derive(Debug)]
 pub enum ExprError {
     UndefinedVar(Ident),
     UndefinedFunc(Ident),
+    BadFnCall(Box<str>, Span, isize),
 }
 
 pub enum Expr {
@@ -82,18 +78,6 @@ impl Parse for Expr {
     }
 }
 
-impl Expr {
-    pub fn eval(&self, ctxt: &dyn Context) -> Result<f64, Vec<ExprError>> {
-        match self {
-            Self::Value(value) => value.eval(ctxt).map_err(|e| vec![e]),
-            Self::Binary(expr) => expr.eval(ctxt),
-            Self::Unary(expr) => expr.eval(ctxt),
-            Self::Group(group) => group.eval(ctxt),
-            Self::FnCall(call) => call.eval(ctxt),
-        }
-    }
-}
-
 pub enum ExprValue {
     Literal(Literal),
     Ident(Ident),
@@ -129,18 +113,6 @@ impl Parse for ExprValue {
     }
 }
 
-impl ExprValue {
-    pub fn eval(&self, ctxt: &dyn Context) -> Result<f64, ExprError> {
-        match self {
-            Self::Ident(ident) => {
-                ctxt.get_variable(&ident.repr)
-                    .ok_or_else(|| ExprError::UndefinedVar(ident.clone()))
-            }
-            Self::Literal(literal) => Ok(literal.num),
-        }
-    }
-}
-
 pub struct ExprBinary {
     pub(super) lhs: Box<Expr>,
     pub(super) op: BinOp,
@@ -168,27 +140,6 @@ impl Parse for ExprBinary {
             op: input.parse()?,
             rhs: Box::new(input.parse()?),
         })
-    }
-}
-
-impl ExprBinary {
-    pub fn eval(&self, ctxt: &dyn Context) -> Result<f64, Vec<ExprError>> {
-        let mut errors = Vec::new();
-
-        let left = self.lhs.eval(ctxt).map_err(|mut e| errors.append(&mut e));
-        let right = self.rhs.eval(ctxt).map_err(|mut e| errors.append(&mut e));
-
-        if let (Ok(l), Ok(r)) = (left, right) {
-            match self.op {
-                BinOp::Add(_) => Ok(l + r),
-                BinOp::Sub(_) => Ok(l - r),
-                BinOp::Mul(_) => Ok(l * r),
-                BinOp::Div(_) => Ok(l / r),
-                BinOp::Exp(_) => Ok(l.powf(r))
-            }
-        } else {
-            Err(errors)
-        }
     }
 }
 
@@ -271,19 +222,6 @@ impl Parse for ExprUnary {
     }
 }
 
-impl ExprUnary {
-    pub fn eval(&self, ctxt: &dyn Context) -> Result<f64, Vec<ExprError>> {
-        let right = self.expr.eval(ctxt);
-        if let Ok(r) = right {
-            match self.op {
-                UnaryOp::Neg(_) => Ok(-r),
-            }
-        } else {
-            right
-        }
-    }
-}
-
 #[derive(Clone)]
 pub enum UnaryOp {
     Neg(Token![-])
@@ -347,12 +285,6 @@ impl Parse for ExprGroup {
     }
 }
 
-impl ExprGroup {
-    pub fn eval(&self, ctxt: &dyn Context) -> Result<f64, Vec<ExprError>> {
-        self.expr.eval(ctxt)
-    }
-}
-
 #[derive(PartialEq, PartialOrd)]
 pub enum Precedence { Assign, Sum, Product, Unary, Exponent, Unambiguous }
 
@@ -410,24 +342,11 @@ impl Parse for ExprFnCall {
     }
 }
 
-impl ExprFnCall {
-    pub fn eval(&self, ctxt: &dyn Context) -> Result<f64, Vec<ExprError>> {
-        let name = &self.name.repr;
-        let func = ctxt.get_function(name)
-            .ok_or(vec![ExprError::UndefinedFunc(self.name.clone())])?;
-
-        let mut arg_exprs = Vec::new();
-        for expr in self.inputs.iter() {
-            arg_exprs.push(expr.eval(ctxt)?);
-        };
-
-        let call = func.call(&arg_exprs);
-
-        Ok(call)
-    }
-}
-
 pub trait ExprVisit {
+    fn visit(&mut self, node: &Expr) {
+        self.visit_expr(node);
+    }
+
     fn visit_expr(&mut self, node: &Expr) {
         match node {
             Expr::Value(e) => self.visit_value(e),

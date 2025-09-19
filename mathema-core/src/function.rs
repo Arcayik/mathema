@@ -10,6 +10,11 @@ pub enum FunctionError {
     Recursion(ExprFnCall),
 }
 
+#[derive(Debug)]
+pub struct CallError {
+    pub(crate) args_off: isize,
+}
+
 impl From<ExprError> for FunctionError {
     fn from(value: ExprError) -> Self {
         Self::ExprError(value)
@@ -68,11 +73,13 @@ impl Function {
         self.inner.num_params()
     }
 
-    pub fn call(&self, args: &[f64]) -> f64 {
-        // TODO: make this a recoverable error
-        assert_eq!(args.len(), self.num_params());
-
-        self.inner.call(args)
+    pub fn call(&self, args: &[f64]) -> Result<f64, CallError> {
+        if args.len() != self.num_params() {
+            let diff = self.num_params() as isize - args.len() as isize;
+            Err(CallError { args_off: diff })
+        } else {
+            Ok(self.inner.call(args))
+        }
     }
 }
 
@@ -129,13 +136,11 @@ impl FunctionInner {
         // TODO: make this a recoverable error
         assert_eq!(args.len(), self.num_params());
 
-        let mut fn_args = Vec::new();
-        for (idx, param) in self.params().into_iter().enumerate() {
-            fn_args.push((param, args[idx]));
-        }
-
         match self {
-            FunctionInner::UserDefined { body, .. } => todo!(),
+            FunctionInner::UserDefined { body, .. } => {
+                let mut eval = Evaluator::new(args);
+                eval.run(&body.tree)
+            },
             FunctionInner::Builtin { body, .. } => body(args),
         }
     }

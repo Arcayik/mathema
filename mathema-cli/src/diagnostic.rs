@@ -43,6 +43,16 @@ impl From<ExprError> for Diagnostic {
                 msg: format!("Undefined Function: {}", func.repr),
                 spans: vec![func.span]
             },
+            ExprError::BadFnCall(fn_name, args_span, args_off) => {
+                let many_or_few = if args_off > 0 { "many" }
+                else if args_off < 0 { "few" }
+                else { panic!("a function call can't be off by 0 arguments") };
+
+                Diagnostic {
+                    msg: format!("Too {} args for function '{}'", many_or_few, fn_name),
+                    spans: vec![args_span]
+                }
+            },
         }
     }
 }

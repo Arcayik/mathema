@@ -16,7 +16,7 @@ pub mod parsing {
     pub use crate::lexer::{LexError, tokenize};
     pub use crate::parser::{ParseBuffer, ParseError, ParseStream};
     pub use crate::expr::{ExprError, BinOp, Expr, ExprBinary, ExprUnary, ExprValue, ExprFnCall, ExprGroup, Precedence, UnaryOp};
-    pub use crate::stmt::Stmt;
+    pub use crate::stmt::{Stmt, VarDecl, FnDecl};
 }
 
 #[cfg(test)]

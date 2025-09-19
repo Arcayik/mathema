@@ -1,15 +1,19 @@
 use std::rc::Rc;
 
 use crate::{
-    function::Function,
-    expr::*,
-    context::Context,
+    context::Context, expr::*, function::Function, token::Spanned
 };
 
 #[derive(Debug)]
 pub struct Algebra {
     pub(crate) params: Vec<String>,
     pub(crate) tree: AlgebraTree,
+}
+
+impl Algebra {
+    pub fn accept<V: AlgebraVisit>(&self, visitor: &mut V) {
+        visitor.visit(&self.tree);
+    }
 }
 
 pub(crate) type AlgebraNode = Rc<AlgebraTree>;
@@ -20,17 +24,6 @@ pub enum AlgebraTree {
     Binary(BinaryNode),
     Unary(UnaryNode),
     FnCall(FnCallNode),
-}
-
-impl AlgebraTree {
-    pub fn eval(&self, args: &[f64]) -> f64 {
-        match self {
-            Self::Value(v) => v.eval(args),
-            Self::Binary(b) => b.eval(args),
-            Self::Unary(u) => u.eval(args),
-            Self::FnCall(f) => f.eval(args),
-        }
-    }
 }
 
 impl From<ValueNode> for AlgebraTree {
@@ -53,7 +46,7 @@ impl From<f64> for AlgebraTree {
 
 impl From<ParamNode> for AlgebraTree {
     fn from(value: ParamNode) -> Self {
-        ValueNode::Var(value).into()
+        ValueNode::Param(value).into()
     }
 }
 
@@ -80,27 +73,15 @@ pub struct NumNode {
     pub(crate) value: f64
 }
 
-impl NumNode {
-    pub fn eval(&self) -> f64 {
-        self.value
-    }
-}
-
 #[derive(Debug, PartialEq)]
 pub struct ParamNode {
     pub(crate) idx: usize
 }
 
-impl ParamNode {
-    fn eval(&self, args: &[f64]) -> f64 {
-        args[self.idx]
-    }
-}
-
 #[derive(Debug, PartialEq)]
 pub enum ValueNode {
     Num(NumNode),
-    Var(ParamNode),
+    Param(ParamNode),
 }
 
 impl From<NumNode> for ValueNode {
@@ -111,16 +92,7 @@ impl From<NumNode> for ValueNode {
 
 impl From<ParamNode> for ValueNode {
     fn from(value: ParamNode) -> Self {
-        Self::Var(value)
-    }
-}
-
-impl ValueNode {
-    fn eval(&self, args: &[f64]) -> f64 {
-        match self {
-            Self::Num(n) => n.eval(),
-            Self::Var(p) => p.eval(args),
-        }
+        Self::Param(value)
     }
 }
 
@@ -129,21 +101,6 @@ pub struct BinaryNode {
     pub(crate) left: AlgebraNode,
     pub(crate) op: BinaryOperation,
     pub(crate) right: AlgebraNode,
-}
-
-impl BinaryNode {
-    fn eval(&self, args: &[f64]) -> f64 {
-        let left = self.left.clone().eval(args);
-        let right = self.right.clone().eval(args);
-
-        match self.op {
-            BinaryOperation::Add => left + right,
-            BinaryOperation::Sub => left - right,
-            BinaryOperation::Mul => left * right,
-            BinaryOperation::Div => left / right,
-            BinaryOperation::Exp => left.powf(right),
-        }
-    }
 }
 
 #[derive(Debug, PartialEq)]
@@ -167,16 +124,6 @@ pub struct UnaryNode {
     pub(crate) tree: Box<AlgebraTree>,
 }
 
-impl UnaryNode {
-    fn eval(&self, args: &[f64]) -> f64 {
-        let inner_tree = self.tree.as_ref();
-        let value = inner_tree.eval(args);
-        match self.op {
-            UnaryOperation::Neg => - value,
-        }
-    }
-}
-
 #[derive(Debug, PartialEq)]
 pub enum UnaryOperation { Neg }
 
@@ -194,25 +141,9 @@ pub struct FnCallNode {
     pub(crate) func: std::rc::Rc<Function>
 }
 
-impl FnCallNode {
-    fn eval_arg_exprs(&self, args: &[f64]) -> Vec<f64> {
-        let eval_results = self.args
-            .iter()
-            .map(|a| AlgebraTree::eval(a, args))
-            .collect();
-
-        eval_results
-    }
-
-    fn eval(&self, args: &[f64]) -> f64 {
-        let args = self.eval_arg_exprs(args);
-        self.func.call(&args)
-    }
-}
-
 pub struct AlgebraBuilder<'b> {
     context: &'b dyn Context,
-    node_queued: Option<AlgebraTree>,
+    stored_node: Option<AlgebraTree>,
     params: Vec<String>,
     errors: Vec<ExprError>,
 }
@@ -222,36 +153,34 @@ impl<'b> AlgebraBuilder<'b> {
         AlgebraBuilder {
             context,
             params,
-            node_queued: None,
+            stored_node: None,
             errors: Vec::new()
         }
     }
 
     pub fn build(mut self, expr: &Expr) -> Result<Algebra, Vec<ExprError>> {
         if let Some(tree) = self.build_tree(expr) {
-            Ok(Algebra {
-                params: self.params,
-                tree
-            })
+            let params = self.params.iter().cloned().map(String::from).collect();
+            Ok(Algebra { params, tree })
         } else {
             Err(self.errors)
         }
     }
 
     fn build_tree(&mut self, expr: &Expr) -> Option<AlgebraTree> {
-        self.visit_expr(expr);
+        self.visit(expr);
         self.take_node()
     }
 
     fn take_node(&mut self) -> Option<AlgebraTree> {
-        self.node_queued.take()
+        self.stored_node.take()
     }
 
     fn store_node(&mut self, node: AlgebraTree) {
-        if self.node_queued.is_some() {
+        if self.stored_node.is_some() {
             panic!("AlgebraTreeBuilder already has a node stored")
         } else {
-            self.node_queued = Some(node)
+            self.stored_node = Some(node)
         };
     }
 }
@@ -263,14 +192,14 @@ impl<'b> ExprVisit for AlgebraBuilder<'b> {
                 NumNode { value: l.num }.into()
             ),
             ExprValue::Ident(id) => {
-                // check if ident name has already been seen
-                let new_node = if let Some(found) = self.params.iter().position(|v| *v == *id.repr) {
-                    ParamNode { idx: found }.into()
+                // check if ident is a parameter, which takes priority
+                let new_node = if let Some(idx) = self.params.iter().position(|v| **v == *id.repr) {
+                    ParamNode { idx }.into()
                 } else {
                     let value = match self.context.get_variable(&id.repr) {
                         Some(v) => v,
                         None => {
-                            self.errors.push(ExprError::UndefinedFunc(id.clone()));
+                            self.errors.push(ExprError::UndefinedVar(id.clone()));
                             return
                         }
                     };
@@ -341,6 +270,14 @@ impl<'b> ExprVisit for AlgebraBuilder<'b> {
             }
         };
 
+        let args_off = args.len() as isize - func.num_params() as isize;
+        if args_off != 0 {
+            let name = node.name.repr.clone();
+            let span = node.parens.span();
+            self.errors.push(ExprError::BadFnCall(name, span, args_off));
+            return
+        }
+
         let new_node = FnCallNode {
             args,
             func
@@ -351,11 +288,15 @@ impl<'b> ExprVisit for AlgebraBuilder<'b> {
 }
 
 pub trait AlgebraVisit {
+    fn visit(&mut self, node: &AlgebraTree) {
+        self.visit_tree(node);
+    }
+
     fn visit_tree(&mut self, node: &AlgebraTree) {
         match node {
             AlgebraTree::Value(n) => self.visit_value(n),
-            AlgebraTree::Binary(n) => self.visit_binary(n),
             AlgebraTree::Unary(n) => self.visit_unary(n),
+            AlgebraTree::Binary(n) => self.visit_binary(n),
             AlgebraTree::FnCall(n) => self.visit_fn_call(n),
         }
     }
@@ -375,5 +316,115 @@ pub trait AlgebraVisit {
 
     fn visit_fn_call(&mut self, node: &FnCallNode) {
         node.args.iter().for_each(|e| self.visit_tree(e));
+    }
+}
+
+pub struct Evaluator<'a> {
+    args: &'a [f64],
+
+    stored_value: Option<f64>,
+}
+
+impl<'a> Evaluator<'a> {
+    pub fn new(args: &'a [f64]) -> Self {
+        Evaluator {
+            args,
+            stored_value: None,
+        }
+    }
+
+    pub fn run(&mut self, algebra: &AlgebraTree) -> f64 {
+        self.visit(algebra);
+        self.take_value()
+    }
+
+    pub fn take_answer(&mut self) -> Option<f64> {
+        self.stored_value.take()
+    }
+
+    pub fn get_args(&self) -> &[f64] {
+        self.args
+    }
+
+    pub fn set_args(&mut self, args: &'a [f64]) {
+        self.args = args;
+    }
+
+    fn store_value(&mut self, value: f64) {
+        if self.stored_value.is_some() {
+            panic!("Evaluator already has a value stored");
+        } else {
+            self.stored_value = Some(value)
+        };
+    }
+
+    fn take_value(&mut self) -> f64 {
+        self.stored_value.take().expect("Evaluator has no value stored")
+    }
+
+    fn clear_value(&mut self) {
+        self.stored_value = None;
+    }
+}
+
+impl<'a> AlgebraVisit for Evaluator<'a> {
+    fn visit(&mut self, node: &AlgebraTree) {
+        self.clear_value();
+        self.visit_tree(node);
+    }
+
+    fn visit_value(&mut self, node: &ValueNode) {
+        let value = match node {
+            ValueNode::Num(n) => n.value,
+            ValueNode::Param(v) => self.args[v.idx],
+        };
+        self.store_value(value);
+    }
+
+    fn visit_unary(&mut self, node: &UnaryNode) {
+        self.visit_tree(&node.tree);
+        let inner_value = self.take_value();
+        match node.op {
+            UnaryOperation::Neg => self.store_value(- inner_value)
+        }
+    }
+
+    fn visit_binary(&mut self, node: &BinaryNode) {
+        self.visit_tree(&node.left);
+        let left = self.take_value();
+        self.visit_tree(&node.right);
+        let right = self.take_value();
+
+        let value = match node.op {
+            BinaryOperation::Add => left + right,
+            BinaryOperation::Sub => left - right,
+            BinaryOperation::Mul => left * right,
+            BinaryOperation::Div => left / right,
+            BinaryOperation::Exp => left.powf(right),
+        };
+
+        self.store_value(value);
+    }
+
+    fn visit_fn_call(&mut self, node: &FnCallNode) {
+        let mut args = Vec::new();
+        for arg in node.args.iter() {
+            self.visit_tree(arg);
+            let arg_value = self.take_value();
+            args.push(arg_value);
+        }
+
+        let value = node.func.call(&args)
+            .expect("function args checked at expr conversion");
+        self.store_value(value);
+    }
+
+    fn visit_tree(&mut self, node: &AlgebraTree) {
+        match node {
+            AlgebraTree::Value(n) => self.visit_value(n),
+            AlgebraTree::Unary(n) => self.visit_unary(n),
+            AlgebraTree::Binary(n) => self.visit_binary(n),
+            AlgebraTree::FnCall(n) => self.visit_fn_call(n),
+        }
     }
 }

@@ -184,19 +184,6 @@ impl<'s> Tokenizer<'s> {
         let ch = self.lexer.next()
             .expect("calling code must ensure remaining characters exist");
 
-        let num_tokens = self.tokens.len();
-
-        let top_group = self.tokens.get_mut(top_idx)
-            .expect("delim stack must have valid group start index");
-
-        let top_delim = match top_group {
-            LexToken::Group(group, offset) => {
-                *offset = num_tokens - top_idx;
-                group.delim
-            },
-            _ => return None
-        };
-
         let delim = match ch {
             ')' => Delimiter::Parenthesis,
             '}' => Delimiter::Brace,
@@ -204,13 +191,28 @@ impl<'s> Tokenizer<'s> {
             _ => panic!("not a valid delimiter"),
         };
 
-        if top_delim == delim {
+        let num_tokens = self.tokens.len();
+
+        let top_group = self.tokens.get_mut(top_idx)
+            .expect("delim stack must have valid group start index");
+
+        // Get the delimiter kind of most recently opened group
+        if let LexToken::Group(group, offset) = top_group {
+            if group.delim != delim {
+                self.trailing_delim();
+                return None
+            }
+
+            // modify original group token
+            *offset = num_tokens - top_idx;
+            group.span.end = self.lexer.offset;
+
+            // create new group end token
             let offset = top_idx as isize - num_tokens as isize;
-            Some(LexToken::End(offset))
-        } else {
-            self.trailing_delim();
-            None
+            return Some(LexToken::End(offset))
         }
+
+        None
     }
 
     fn push_group(&mut self) {

@@ -75,11 +75,7 @@ fn parse_ast<T: ToString>(input: T) -> Result<Stmt, Vec<Diagnostic>> {
         return Err(Diagnostic::from_vec(errors))
     }
 
-    let statement = {
-        let parser = ParseBuffer::new(tokens);
-        parser.parse().map_err(|e| vec![e.into()])
-    };
-
-    statement
+    let parser = ParseBuffer::new(tokens);
+    parser.parse().map_err(|e| vec![e.into()])
 }
 

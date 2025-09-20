@@ -160,7 +160,7 @@ impl<'b> AlgebraBuilder<'b> {
 
     pub fn build(mut self, expr: &Expr) -> Result<Algebra, Vec<ExprError>> {
         if let Some(tree) = self.build_tree(expr) {
-            let params = self.params.iter().cloned().map(String::from).collect();
+            let params = self.params;
             Ok(Algebra { params, tree })
         } else {
             Err(self.errors)
@@ -217,18 +217,15 @@ impl<'b> ExprVisit for AlgebraBuilder<'b> {
         self.visit_expr(&node.rhs);
         let right = self.take_node();
 
-        match (left, right) {
-            (Some(l), Some(r)) => self.store_node(
+        if let (Some(l), Some(r)) = (left, right) {
+            self.store_node(
                 BinaryNode {
                     left: l.into(),
                     op: node.op.clone().into(),
                     right: r.into(),
                 }.into()
-            ),
-
-            _ => {}
+            )
         }
-
     }
 
     fn visit_unary(&mut self, node: &ExprUnary) {

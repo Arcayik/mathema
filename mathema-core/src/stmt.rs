@@ -42,14 +42,20 @@ impl Spanned for Stmt {
 
 impl Parse for Stmt {
     fn parse(input: ParseStream) -> Result<Self, ParseError> {
-        if input.peek::<Ident>() && input.peek2::<Token![=]>() {
+        let result = if input.peek::<Ident>() && input.peek2::<Token![=]>() {
             input.parse().map(Stmt::VarDecl)
         } else if input.peek::<Ident>() && input.peek2::<Paren>() {
             // might be a declaration, might just be a call in an expr
             parse_ambiguous_fn(input)
         } else {
             input.parse().map(Stmt::Expr)
+        };
+
+        if !input.peek::<End>() {
+            return Err(input.error("Trailing token"))
         }
+
+        result
     }
 }
 

@@ -108,6 +108,10 @@ impl ParseBuffer {
         }
     }
 
+    pub fn pos(&self) -> usize {
+        self.pos.get()
+    }
+
     pub fn save_pos(&self) -> ParserPosition {
         self.pos.get().into()
     }
@@ -120,7 +124,7 @@ impl ParseBuffer {
         self.pos.get() == self.src.len() - 1
     }
 
-    fn find_span(&self, token: &LexToken) -> Span {
+    pub fn get_span(&self, token: &LexToken) -> Span {
         match token {
             LexToken::Literal(literal) => literal.span(),
             LexToken::Ident(ident) => ident.span(),
@@ -129,13 +133,13 @@ impl ParseBuffer {
             LexToken::End(offset) => {
                 let group_pos = self.pos.get() - offset.unsigned_abs();
                 let group = &self.src[group_pos];
-                self.find_span(group)
+                self.get_span(group)
             },
         }
     }
 
     pub fn error(&self, msg: &str) -> ParseError {
-        let span = self.find_span(self.peek_token());
+        let span = self.get_span(self.peek_token());
         ParseError { msg: msg.to_string(), span }
     }
 

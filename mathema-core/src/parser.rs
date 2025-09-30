@@ -1,8 +1,7 @@
 use std::cell::Cell;
 
 use crate::{
-    token::{Span, Spanned, Token, Parse},
-    lexer::LexToken
+    lexer::{LexToken, TokenBuffer}, token::{Parse, Span, Spanned, Token}
 };
 
 type Result<T> = std::result::Result<T, ParseError>;
@@ -37,12 +36,12 @@ impl From<usize> for ParserPosition {
 pub type ParseStream<'p> = &'p ParseBuffer;
 
 pub struct ParseBuffer {
-    src: Box<[LexToken]>,
+    src: TokenBuffer,
     pos: Cell<usize>,
 }
 
 impl ParseBuffer {
-    pub fn new(src: Box<[LexToken]>) -> Self {
+    pub fn new(src: TokenBuffer) -> Self {
         ParseBuffer { src, pos: Cell::new(0) }
     }
 

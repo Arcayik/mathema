@@ -1,3 +1,5 @@
+use std::ops::Deref;
+
 use crate::token::*;
 
 #[derive(Debug, Clone)]
@@ -50,6 +52,35 @@ impl Spanned for LexError {
             Self::UnclosedDelim(span) => *span,
             Self::TrailingDelim(span) => *span
         }
+    }
+}
+
+pub struct TokenBuffer(Box<[LexToken]>);
+
+impl TokenBuffer {
+    pub fn empty() -> Self {
+        TokenBuffer(Box::new([]))
+    }
+
+    pub fn from_boxed_slice(slice: Box<[LexToken]>) -> Self {
+        TokenBuffer(slice)
+    }
+
+    pub fn from_vec(vec: Vec<LexToken>) -> Self {
+        TokenBuffer(vec.into_boxed_slice())
+    }
+
+    pub fn from_iter<T: Iterator<Item = LexToken>>(iter: T) -> Self {
+        let inner = iter.collect();
+        TokenBuffer(inner)
+    }
+}
+
+impl Deref for TokenBuffer {
+    type Target = [LexToken];
+
+    fn deref(&self) -> &Self::Target {
+        &self.0
     }
 }
 

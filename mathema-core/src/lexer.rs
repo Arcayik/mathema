@@ -84,204 +84,10 @@ impl Deref for TokenBuffer {
     }
 }
 
-struct Tokenizer<'s> {
-    lexer: Lexer<'s>,
-    tokens: Vec<LexToken>,
-    errors: Vec<LexError>,
-    delim_stack: Vec<usize>
-}
-
-impl<'s> Tokenizer<'s> {
-    fn new(lexer: Lexer<'s>) -> Self {
-        Tokenizer {
-            lexer,
-            tokens: Vec::new(),
-            errors: Vec::new(),
-            delim_stack: Vec::new(),
-        }
-    }
-
-    pub fn process(&mut self) {
-        while let Some(token) = self.lex_token() {
-            self.tokens.push(token);
-        }
-        self.tokens.push(LexToken::End(self.tokens.len() as isize));
-    }
-
-    fn lex_token(&mut self) -> Option<LexToken> {
-        loop {
-            let ch = self.lexer.peek()?;
-            match ch {
-                ch if ch.is_whitespace() => {
-                    self.lexer.next();
-                },
-
-                '+' | '-' | '*' | '/' | '^' | '=' | ',' => {
-                    return Some(self.punct())
-                },
-
-                '(' | '{' | '[' => {
-                    return Some(self.open_group())
-                },
-
-                ')' | '}' | ']' => {
-                    let end = self.close_group();
-                    if end.is_some() {
-                        return end
-                    }
-                }
-
-                ch if ch.is_ascii_alphabetic() || ch == '_' => {
-                    return Some(self.ident())
-                },
-                ch if ch.is_ascii_digit() => {
-                    let literal = self.literal();
-                    if literal.is_some() {
-                        return literal;
-                    }
-                },
-                _ => {
-                    self.unknown_char();
-                },
-            }
-        }
-    }
-
-    pub fn process_unclosed_groups(&mut self) {
-        while let Some(unclosed_idx) = self.delim_stack.pop() {
-            let token = self.tokens.get(unclosed_idx)
-                .expect("delim stack must have valid group start index");
-            let group = match token {
-                LexToken::Group(g, _) => g,
-                _ => panic!("delim stack index does not point to group token")
-            };
-            self.unclosed_delim(group.clone());
-        }
-    }
-
-    fn punct(&mut self) -> LexToken {
-        let start = self.lexer.mark();
-        let ch = self.lexer.next().expect("calling code must ensure remaining characters exist");
-        let span = self.lexer.span_from(start);
-        LexToken::Punct(Punct { repr: ch.to_string().into(), span })
-    }
-
-    fn ident(&mut self) -> LexToken {
-        let start = self.lexer.mark();
-        let ident_str = self.lexer.eat_while(|ch| ch.is_alphanumeric() || ch == '_');
-        let span = self.lexer.span_from(start);
-        LexToken::Ident(Ident { repr: ident_str.into(), span })
-    }
-
-    fn literal(&mut self) -> Option<LexToken> {
-        let start = self.lexer.mark();
-        let number_str = self.lexer.eat_while(|ch| ch.is_ascii_digit() || ch == '.');
-        let span = self.lexer.span_from(start);
-        if let Ok(num) = number_str.parse::<f64>() {
-            Some(LexToken::Literal(Literal { num, span }))
-        } else {
-            self.num_parse_error(span);
-            None
-        }
-    }
-
-    fn open_group(&mut self) -> LexToken {
-        let span = self.lexer.span_char();
-        let ch = self.lexer.next()
-            .expect("calling code must ensure remaining characters exist");
-
-        let delim = match ch {
-            '(' => Delimiter::Parenthesis,
-            '{' => Delimiter::Brace,
-            '[' => Delimiter::Bracket,
-            _ => panic!("not a valid delimiter"),
-        };
-
-        let group = Group { delim, span };
-        self.push_group();
-        LexToken::Group(group, 0)
-    }
-
-    fn close_group(&mut self) -> Option<LexToken> {
-        let top_idx = match self.pop_group() {
-            Some(i) => i,
-            None => {
-                self.trailing_delim();
-                self.lexer.next();
-                return None;
-            }
-        };
-
-        let ch = self.lexer.next()
-            .expect("calling code must ensure remaining characters exist");
-
-        let delim = match ch {
-            ')' => Delimiter::Parenthesis,
-            '}' => Delimiter::Brace,
-            ']' => Delimiter::Bracket,
-            _ => panic!("not a valid delimiter"),
-        };
-
-        let num_tokens = self.tokens.len();
-
-        let top_group = self.tokens.get_mut(top_idx)
-            .expect("delim stack must have valid group start index");
-
-        // Get the delimiter kind of most recently opened group
-        if let LexToken::Group(group, offset) = top_group {
-            if group.delim != delim {
-                self.trailing_delim();
-                return None
-            }
-
-            // modify original group token
-            *offset = num_tokens - top_idx;
-            group.span.end = self.lexer.offset;
-
-            // create new group end token
-            let offset = top_idx as isize - num_tokens as isize;
-            return Some(LexToken::End(offset))
-        }
-
-        None
-    }
-
-    fn push_group(&mut self) {
-        self.delim_stack.push(self.tokens.len());
-    }
-
-    fn pop_group(&mut self) -> Option<usize> {
-        self.delim_stack.pop()
-    }
-
-    fn unknown_char(&mut self) {
-        let span = self.lexer.span_char();
-        let error = LexError::UnknownChar(self.lexer.next().expect("no char"), span);
-        self.errors.push(error);
-    }
-
-    fn num_parse_error(&mut self, span: Span) {
-        let error = LexError::NumParseError(span);
-        self.errors.push(error);
-    }
-
-    fn unclosed_delim(&mut self, group: Group) {
-        let span = group.span();
-        let error = LexError::UnclosedDelim(span);
-        self.errors.push(error);
-    }
-
-    fn trailing_delim(&mut self) {
-        let span = self.lexer.span_char();
-        let error = LexError::TrailingDelim(span);
-        self.errors.push(error);
-    }
-}
-
 pub struct Lexer<'s> {
     /// Trimmed input
     source: &'s str,
-    /// Iterator over input
+    /// Iterator over input chars
     input: std::str::Chars::<'s>,
     /// Peeked character and its byte offset
     peeked: Option<(char, usize)>,
@@ -361,14 +167,212 @@ impl<'s> Lexer<'s> {
     }
 }
 
-pub fn tokenize(input: &str) -> (Box<[LexToken]>, Vec<LexError>) {
+struct Tokenizer<'s> {
+    lexer: Lexer<'s>,
+    tokens: Vec<LexToken>,
+    errors: Vec<LexError>,
+    delim_stack: Vec<usize>
+}
+
+impl<'s> Tokenizer<'s> {
+    fn new(lexer: Lexer<'s>) -> Self {
+        Tokenizer {
+            lexer,
+            tokens: Vec::new(),
+            errors: Vec::new(),
+            delim_stack: Vec::new(),
+        }
+    }
+
+    pub fn tokenize(&mut self) {
+        while let Some(token) = self.lex_token() {
+            self.tokens.push(token);
+        }
+        self.tokens.push(LexToken::End(self.tokens.len() as isize));
+    }
+
+    fn lex_token(&mut self) -> Option<LexToken> {
+        loop {
+            let ch = self.lexer.peek()?;
+            match ch {
+                ch if ch.is_whitespace() => {
+                    self.lexer.next();
+                },
+
+                '+' | '-' | '*' | '/' | '^' | '=' | ',' => {
+                    return Some(lexing::punct(self))
+                },
+
+                '(' | '{' | '[' => {
+                    return Some(self.open_group())
+                },
+
+                ')' | '}' | ']' => {
+                    let end = self.close_group();
+                    if end.is_some() {
+                        return end
+                    }
+                }
+
+                ch if ch.is_ascii_alphabetic() || ch == '_' => {
+                    return Some(lexing::ident(self))
+                },
+                ch if ch.is_ascii_digit() => {
+                    let literal = lexing::literal(self);
+                    if literal.is_some() {
+                        return literal;
+                    }
+                },
+                _ => {
+                    self.unknown_char();
+                },
+            }
+        }
+    }
+
+    fn open_group(&mut self) -> LexToken {
+        let span = self.lexer.span_char();
+        let ch = self.lexer.next()
+            .expect("calling code must ensure remaining characters exist");
+
+        let delim = match ch {
+            '(' => Delimiter::Parenthesis,
+            '{' => Delimiter::Brace,
+            '[' => Delimiter::Bracket,
+            _ => panic!("not a valid delimiter"),
+        };
+
+        let group = Group { delim, span };
+        self.push_group();
+        LexToken::Group(group, 0)
+    }
+
+    fn close_group(&mut self) -> Option<LexToken> {
+        let top_idx = match self.pop_group() {
+            Some(i) => i,
+            None => {
+                self.trailing_delim();
+                self.lexer.next();
+                return None;
+            }
+        };
+
+        let ch = self.lexer.next()
+            .expect("calling code must ensure remaining characters exist");
+
+        let delim = match ch {
+            ')' => Delimiter::Parenthesis,
+            '}' => Delimiter::Brace,
+            ']' => Delimiter::Bracket,
+            _ => panic!("not a valid delimiter"),
+        };
+
+        let num_tokens = self.tokens.len();
+
+        let top_group = self.tokens.get_mut(top_idx)
+            .expect("delim stack must have valid group start index");
+
+        // Get the delimiter kind of most recently opened group
+        if let LexToken::Group(group, offset) = top_group {
+            if group.delim != delim {
+                self.trailing_delim();
+                return None
+            }
+
+            // modify original group token
+            *offset = num_tokens - top_idx;
+            group.span.end = self.lexer.offset;
+
+            // create new group end token
+            let offset = top_idx as isize - num_tokens as isize;
+            return Some(LexToken::End(offset))
+        }
+
+        None
+    }
+
+    fn push_group(&mut self) {
+        self.delim_stack.push(self.tokens.len());
+    }
+
+    fn pop_group(&mut self) -> Option<usize> {
+        self.delim_stack.pop()
+    }
+
+    pub fn handle_unclosed_groups(&mut self) {
+        while let Some(unclosed_idx) = self.delim_stack.pop() {
+            let token = self.tokens.get(unclosed_idx)
+                .expect("delim stack must have valid group start index");
+            let group = match token {
+                LexToken::Group(g, _) => g,
+                _ => panic!("delim stack index does not point to group token")
+            };
+            self.unclosed_delim(group.clone());
+        }
+    }
+
+    fn unknown_char(&mut self) {
+        let span = self.lexer.span_char();
+        let error = LexError::UnknownChar(self.lexer.next().expect("no char"), span);
+        self.errors.push(error);
+    }
+
+    fn num_parse_error(&mut self, span: Span) {
+        let error = LexError::NumParseError(span);
+        self.errors.push(error);
+    }
+
+    fn unclosed_delim(&mut self, group: Group) {
+        let span = group.span();
+        let error = LexError::UnclosedDelim(span);
+        self.errors.push(error);
+    }
+
+    fn trailing_delim(&mut self) {
+        let span = self.lexer.span_char();
+        let error = LexError::TrailingDelim(span);
+        self.errors.push(error);
+    }
+}
+
+pub fn tokenize(input: &str) -> (TokenBuffer, Vec<LexError>) {
     let lexer = Lexer::new(input);
     let mut tokenizer = Tokenizer::new(lexer);
 
-    tokenizer.process();
-    tokenizer.process_unclosed_groups();
+    tokenizer.tokenize();
+    tokenizer.handle_unclosed_groups();
 
-    let buffer: Box<[LexToken]> = tokenizer.tokens.into();
-    let errors: Vec<LexError> = tokenizer.errors;
-    (buffer, errors)
+    let tokens = TokenBuffer::from_vec(tokenizer.tokens);
+    let errors = tokenizer.errors;
+    (tokens, errors)
+}
+
+mod lexing {
+    use crate::{lexer::{Ident, LexToken, Punct, Tokenizer}, token::Literal};
+
+    pub fn punct(tokenizer: &mut Tokenizer) -> LexToken {
+        let start = tokenizer.lexer.mark();
+        let ch = tokenizer.lexer.next().expect("calling code must ensure remaining characters exist");
+        let span = tokenizer.lexer.span_from(start);
+        LexToken::Punct(Punct { repr: ch.to_string().into(), span })
+    }
+
+    pub fn ident(tokenizer: &mut Tokenizer) -> LexToken {
+        let start = tokenizer.lexer.mark();
+        let ident_str = tokenizer.lexer.eat_while(|ch| ch.is_alphanumeric() || ch == '_');
+        let span = tokenizer.lexer.span_from(start);
+        LexToken::Ident(Ident { repr: ident_str.into(), span })
+    }
+
+    pub fn literal(tokenizer: &mut Tokenizer) -> Option<LexToken> {
+        let start = tokenizer.lexer.mark();
+        let number_str = tokenizer.lexer.eat_while(|ch| ch.is_ascii_digit() || ch == '.');
+        let span = tokenizer.lexer.span_from(start);
+        if let Ok(num) = number_str.parse::<f64>() {
+            Some(LexToken::Literal(Literal { num, span }))
+        } else {
+            tokenizer.num_parse_error(span);
+            None
+        }
+    }
 }

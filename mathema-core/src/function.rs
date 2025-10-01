@@ -1,7 +1,7 @@
 use crate::{
-    algebra::*,
+    algebra::{Algebra, AlgebraBuilder, Evaluator},
     context::Context,
-    parsing::expr::*,
+    parsing::ast::{Expr, ExprFnCall, ExprError},
 };
 
 #[derive(Debug)]

@@ -2,7 +2,7 @@ use mathema_core::{
     parsing::{
         token::{Span, Spanned},
         lexer::LexError,
-        expr::ExprError,
+        ast::ExprError,
         parser::ParseError,
     },
     function::FunctionError

@@ -6,7 +6,7 @@ use mathema_core::{
     context::Context,
     function::{Function, FunctionBuilder},
     intrinsics,
-    parsing::{expr::Expr, token::Spanned, stmt::{Stmt, VarDecl, FnDecl}}
+    parsing::{token::Spanned, ast::{Stmt, Expr, VarDecl, FnDecl}}
 };
 
 use crate::Diagnostic;

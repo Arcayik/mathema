@@ -4,7 +4,7 @@ use mathema_core::{
     parsing::{
         lexer::tokenize,
         parser::ParseBuffer, 
-        stmt::Stmt
+        ast::Stmt
     }
 };
 

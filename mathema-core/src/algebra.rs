@@ -3,7 +3,7 @@ use std::rc::Rc;
 use crate::{
     context::Context, function::Function, 
     parsing::{
-        expr::*,
+        ast::{Expr, ExprBinary, BinOp, ExprUnary, UnaryOp, ExprFnCall, ExprGroup, ExprValue, ExprError, ExprVisit},
         token::Spanned,
     }
 };

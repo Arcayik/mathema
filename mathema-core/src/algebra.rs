@@ -103,14 +103,14 @@ impl From<ParamNode> for ValueNode {
 #[derive(Debug, PartialEq)]
 pub struct BinaryNode {
     pub(crate) left: AlgebraNode,
-    pub(crate) op: BinaryOperation,
+    pub(crate) op: AlgBinOp,
     pub(crate) right: AlgebraNode,
 }
 
 #[derive(Debug, PartialEq)]
-pub enum BinaryOperation { Add, Sub, Mul, Div, Exp }
+pub enum AlgBinOp { Add, Sub, Mul, Div, Exp }
 
-impl From<BinOp> for BinaryOperation {
+impl From<BinOp> for AlgBinOp {
     fn from(value: BinOp) -> Self {
         match value {
             BinOp::Add(_) => Self::Add,
@@ -124,17 +124,17 @@ impl From<BinOp> for BinaryOperation {
 
 #[derive(Debug, PartialEq)]
 pub struct UnaryNode {
-    pub(crate) op: UnaryOperation,
+    pub(crate) op: AlgUnaryOp,
     pub(crate) tree: Box<AlgebraTree>,
 }
 
 #[derive(Debug, PartialEq)]
-pub enum UnaryOperation { Neg }
+pub enum AlgUnaryOp { Neg }
 
-impl From<UnaryOp> for UnaryOperation {
+impl From<UnaryOp> for AlgUnaryOp {
     fn from(value: UnaryOp) -> Self {
         match value {
-            UnaryOp::Neg(_) => UnaryOperation::Neg,
+            UnaryOp::Neg(_) => AlgUnaryOp::Neg,
         }
     }
 }
@@ -386,7 +386,7 @@ impl<'a> AlgebraVisit for Evaluator<'a> {
         self.visit_tree(&node.tree);
         let inner_value = self.take_value();
         match node.op {
-            UnaryOperation::Neg => self.store_value(- inner_value)
+            AlgUnaryOp::Neg => self.store_value(- inner_value)
         }
     }
 
@@ -397,11 +397,11 @@ impl<'a> AlgebraVisit for Evaluator<'a> {
         let right = self.take_value();
 
         let value = match node.op {
-            BinaryOperation::Add => left + right,
-            BinaryOperation::Sub => left - right,
-            BinaryOperation::Mul => left * right,
-            BinaryOperation::Div => left / right,
-            BinaryOperation::Exp => left.powf(right),
+            AlgBinOp::Add => left + right,
+            AlgBinOp::Sub => left - right,
+            AlgBinOp::Mul => left * right,
+            AlgBinOp::Div => left / right,
+            AlgBinOp::Exp => left.powf(right),
         };
 
         self.store_value(value);

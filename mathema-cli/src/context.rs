@@ -2,7 +2,11 @@ use std::collections::HashMap;
 use std::rc::Rc;
 
 use mathema_core::{
-    algebra::{AlgebraBuilder, Evaluator}, context::Context, function::{Function, FunctionBuilder}, intrinsics, parsing::{Expr, FnDecl, Spanned, Stmt, VarDecl}
+    algebra::{AlgebraBuilder, Evaluator},
+    context::Context,
+    function::{Function, FunctionBuilder},
+    intrinsics,
+    parsing::{expr::Expr, token::Spanned, stmt::{Stmt, VarDecl, FnDecl}}
 };
 
 use crate::Diagnostic;

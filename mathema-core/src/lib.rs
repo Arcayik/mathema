@@ -1,23 +1,9 @@
-#[macro_use]
-mod token;
-mod lexer;
-mod parser;
-mod stmt;
-mod expr;
-mod punctuated;
-
 pub mod algebra;
 pub mod function;
 pub mod context;
 pub mod intrinsics;
-
-pub mod parsing {
-    pub use crate::token::{Span, Spanned, Token, Parse};
-    pub use crate::lexer::{LexError, tokenize};
-    pub use crate::parser::{ParseBuffer, ParseError, ParseStream};
-    pub use crate::expr::{ExprError, BinOp, Expr, ExprBinary, ExprUnary, ExprValue, ExprFnCall, ExprGroup, Precedence, UnaryOp};
-    pub use crate::stmt::{Stmt, VarDecl, FnDecl};
-}
+#[macro_use]
+pub mod parsing;
 
 #[cfg(test)]
 mod tests {

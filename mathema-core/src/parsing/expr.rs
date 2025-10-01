@@ -1,5 +1,8 @@
-use crate::{
-    lexer::LexToken, parser::{ParseError, ParseStream}, punctuated::Punctuated, stmt::parse_punctuated_group, token::{Delimiter, End, Ident, Literal, Paren, Parse, Span, Spanned, Token}
+use super::{
+    lexer::LexToken,
+    parser::{ParseError, ParseStream},
+    punctuated::Punctuated,
+    stmt::parse_punctuated_group, token::{Delimiter, End, Ident, Literal, Paren, Parse, Span, Spanned, Token}
 };
 
 #[derive(Debug)]
@@ -114,9 +117,9 @@ impl Parse for ExprValue {
 }
 
 pub struct ExprBinary {
-    pub(super) lhs: Box<Expr>,
-    pub(super) op: BinOp,
-    pub(super) rhs: Box<Expr>,
+    pub(crate) lhs: Box<Expr>,
+    pub(crate) op: BinOp,
+    pub(crate) rhs: Box<Expr>,
 }
 
 impl std::fmt::Debug for ExprBinary {
@@ -254,8 +257,8 @@ impl Parse for UnaryOp {
 }
 
 pub struct ExprGroup {
-    pub(super) delim: Delimiter,
-    pub(super) expr: Box<Expr>,
+    pub(crate) delim: Delimiter,
+    pub(crate) expr: Box<Expr>,
 }
 
 impl std::fmt::Debug for ExprGroup {
@@ -380,7 +383,7 @@ pub trait ExprVisit {
 }
 
 mod parsing {
-    use crate::token::Paren;
+    use crate::parsing::token::Paren;
 
     use super::*;
 

@@ -1,6 +1,6 @@
 use std::ops::Deref;
 
-use crate::token::*;
+use super::token::*;
 
 #[derive(Debug, Clone)]
 pub enum LexToken {
@@ -348,7 +348,7 @@ pub fn tokenize(input: &str) -> (TokenBuffer, Vec<LexError>) {
 }
 
 mod lexing {
-    use crate::{lexer::{Ident, LexToken, Punct, Tokenizer}, token::Literal};
+    use crate::parsing::{lexer::{Ident, LexToken, Punct, Tokenizer}, token::Literal};
 
     pub fn punct(tokenizer: &mut Tokenizer) -> LexToken {
         let start = tokenizer.lexer.mark();

@@ -1,5 +1,10 @@
 use mathema_core::{
-    parsing::{LexError, ExprError, ParseError, Span, Spanned},
+    parsing::{
+        token::{Span, Spanned},
+        lexer::LexError,
+        expr::ExprError,
+        parser::ParseError,
+    },
     function::FunctionError
 };
 

@@ -1,6 +1,4 @@
-use crate::{
-    token::{Span, Spanned}
-};
+use super::token::{Span, Spanned};
 
 #[derive(Debug)]
 pub struct Punctuated<T, S> {

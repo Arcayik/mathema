@@ -1,7 +1,11 @@
 use std::rc::Rc;
 
 use crate::{
-    context::Context, expr::*, function::Function, token::Spanned
+    context::Context, function::Function, 
+    parsing::{
+        expr::*,
+        token::Spanned,
+    }
 };
 
 #[derive(Debug)]

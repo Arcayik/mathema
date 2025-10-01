@@ -1,6 +1,6 @@
 use std::cell::Cell;
 
-use crate::{
+use super::{
     lexer::{LexToken, TokenBuffer}, token::{Parse, Span, Spanned, Token}
 };
 

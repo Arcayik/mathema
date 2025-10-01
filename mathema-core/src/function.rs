@@ -1,7 +1,7 @@
 use crate::{
     algebra::*,
     context::Context,
-    expr::*,
+    parsing::expr::*,
 };
 
 #[derive(Debug)]

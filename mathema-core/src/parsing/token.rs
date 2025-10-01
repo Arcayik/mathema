@@ -1,6 +1,8 @@
 use crate::{
-    lexer::LexToken,
-    parser::{ParseStream, ParseError},
+    parsing::{
+        lexer::LexToken,
+        parser::{ParseStream, ParseError},
+    }
 };
 
 #[derive(Debug, Clone, Copy)]
@@ -44,7 +46,7 @@ macro_rules! define_punctuation {
 
             impl Parse for $name {
                 fn parse(input: ParseStream) -> Result<Self, ParseError> {
-                    if let $crate::lexer::LexToken::Punct(punct) = input.next_token() {
+                    if let $crate::parsing::lexer::LexToken::Punct(punct) = input.next_token() {
                         if punct.repr.to_string() == $token {
                             Ok(Self { span: punct.span })
                         } else {
@@ -58,7 +60,7 @@ macro_rules! define_punctuation {
 
             impl Token for $name {
                 fn peek(input: ParseStream) -> bool {
-                    if let $crate::lexer::LexToken::Punct(punct) = input.peek_token() {
+                    if let $crate::parsing::lexer::LexToken::Punct(punct) = input.peek_token() {
                         punct.repr.to_string() == $token
                     } else {
                         false
@@ -78,14 +80,14 @@ macro_rules! define_delimiters {
             #[allow(unused)]
             #[derive(Debug)]
             pub struct $name {
-                span: $crate::token::Span
+                span: $crate::parsing::token::Span
             }
 
             impl_spanned! { $name }
 
             impl Parse for $name {
                 fn parse(input: ParseStream) -> Result<Self, ParseError> {
-                    if let $crate::lexer::LexToken::Group(group, _) = input.next_token() {
+                    if let $crate::parsing::lexer::LexToken::Group(group, _) = input.next_token() {
                         if matches!(group.delim, Delimiter::$variant) {
                             Ok(Self { span: group.span() })
                         } else {
@@ -100,7 +102,7 @@ macro_rules! define_delimiters {
             impl Token for $name {
                 fn peek<'s>(input: ParseStream) -> bool {
                     match input.peek_token() {
-                        $crate::lexer::LexToken::Group(g, _) => matches!(g.delim, Delimiter::$variant),
+                        $crate::parsing::lexer::LexToken::Group(g, _) => matches!(g.delim, Delimiter::$variant),
                         _ => false
                     }
                 }
@@ -111,15 +113,14 @@ macro_rules! define_delimiters {
     };
 }
 
-#[macro_export]
 macro_rules! Token {
-    [+] => { $crate::token::Plus };
-    [-] => { $crate::token::Minus };
-    [*] => { $crate::token::Star };
-    [/] => { $crate::token::Slash };
-    [^] => { $crate::token::Caret };
-    [=] => { $crate::token::Equals };
-    [,] => { $crate::token::Comma };
+    [+] => { $crate::parsing::token::Plus };
+    [-] => { $crate::parsing::token::Minus };
+    [*] => { $crate::parsing::token::Star };
+    [/] => { $crate::parsing::token::Slash };
+    [^] => { $crate::parsing::token::Caret };
+    [=] => { $crate::parsing::token::Equals };
+    [,] => { $crate::parsing::token::Comma };
 }
 
 define_punctuation! {

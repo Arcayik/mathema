@@ -1,7 +1,11 @@
 use std::io::Write;
 
 use mathema_core::{
-    parsing::{tokenize, ParseBuffer, Stmt},
+    parsing::{
+        lexer::tokenize,
+        parser::ParseBuffer, 
+        stmt::Stmt
+    }
 };
 
 mod context;

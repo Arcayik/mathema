@@ -8,9 +8,11 @@ pub mod parsing;
 #[cfg(test)]
 mod tests {
     use crate::{
-        lexer::tokenize,
-        parser::ParseBuffer, 
-        stmt::Stmt,
+        parsing::{
+            lexer::tokenize,
+            parser::ParseBuffer, 
+            ast::Stmt,
+        }
     };
 
     #[test]

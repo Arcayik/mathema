@@ -4,14 +4,15 @@ use mathema_core::{
     parsing::{
         lexer::tokenize,
         parser::ParseBuffer, 
-        ast::Stmt
-    }
+        ast::Stmt,
+    },
+    context::ScopeContext,
 };
 
 mod context;
 mod diagnostic;
 
-use context::{ScopeContext, Outcome, process_statement};
+use context::{Outcome, process_statement};
 use diagnostic::Diagnostic;
 
 pub struct Prompt {

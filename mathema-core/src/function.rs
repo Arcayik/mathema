@@ -139,7 +139,7 @@ impl FunctionInner {
         match self {
             FunctionInner::UserDefined { body, .. } => {
                 let mut eval = Evaluator::new(args);
-                eval.run(&body.tree)
+                eval.run(&body.tree.borrow())
             },
             FunctionInner::Builtin { body, .. } => body(args),
         }

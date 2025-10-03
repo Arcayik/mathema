@@ -1,4 +1,4 @@
-use std::rc::Rc;
+use std::{cell::RefCell, rc::Rc};
 
 use crate::{
     context::Context, function::Function, 
@@ -11,16 +11,20 @@ use crate::{
 #[derive(Debug)]
 pub struct Algebra {
     pub(crate) params: Vec<String>,
-    pub(crate) tree: AlgebraTree,
+    pub(crate) tree: AlgebraNode,
 }
 
 impl Algebra {
     pub fn accept<V: AlgebraVisit>(&self, visitor: &mut V) {
-        visitor.visit(&self.tree);
+        visitor.visit(&self.tree.borrow());
+    }
+
+    pub fn accept_mut<V: AlgebraVisitMut>(&mut self, visitor: &mut V) {
+        visitor.visit(&mut self.tree);
     }
 }
 
-pub(crate) type AlgebraNode = Rc<AlgebraTree>;
+pub(crate) type AlgebraNode = Rc<RefCell<AlgebraTree>>;
 
 #[derive(Debug, PartialEq)]
 pub enum AlgebraTree {
@@ -110,6 +114,22 @@ pub struct BinaryNode {
 #[derive(Debug, PartialEq)]
 pub enum AlgBinOp { Add, Sub, Mul, Div, Exp }
 
+impl AlgBinOp {
+    pub fn is_additive(&self) -> bool {
+        match self {
+            AlgBinOp::Add | AlgBinOp::Sub => true,
+            _ => false,
+        }
+    }
+
+    pub fn is_multiplicative(&self) -> bool {
+        match self {
+            AlgBinOp::Mul | AlgBinOp::Div => true,
+            _ => false,
+        }
+    }
+}
+
 impl From<BinOp> for AlgBinOp {
     fn from(value: BinOp) -> Self {
         match value {
@@ -125,7 +145,7 @@ impl From<BinOp> for AlgBinOp {
 #[derive(Debug, PartialEq)]
 pub struct UnaryNode {
     pub(crate) op: AlgUnaryOp,
-    pub(crate) tree: Box<AlgebraTree>,
+    pub(crate) tree: AlgebraNode,
 }
 
 #[derive(Debug, PartialEq)]
@@ -141,7 +161,7 @@ impl From<UnaryOp> for AlgUnaryOp {
 
 #[derive(Debug, PartialEq)]
 pub struct FnCallNode {
-    pub(crate) args: Box<[AlgebraTree]>,
+    pub(crate) args: Box<[AlgebraNode]>,
     pub(crate) func: std::rc::Rc<Function>
 }
 
@@ -164,6 +184,7 @@ impl<'b> AlgebraBuilder<'b> {
 
     pub fn build(mut self, expr: &Expr) -> Result<Algebra, Vec<ExprError>> {
         if let Some(tree) = self.build_tree(expr) {
+            let tree = Rc::new(RefCell::new(tree));
             let params = self.params;
             Ok(Algebra { params, tree })
         } else {
@@ -224,9 +245,9 @@ impl<'b> ExprVisit for AlgebraBuilder<'b> {
         if let (Some(l), Some(r)) = (left, right) {
             self.store_node(
                 BinaryNode {
-                    left: l.into(),
+                    left: Rc::new(RefCell::new(l.into())),
                     op: node.op.clone().into(),
-                    right: r.into(),
+                    right: Rc::new(RefCell::new(r.into())),
                 }.into()
             )
         }
@@ -240,7 +261,7 @@ impl<'b> ExprVisit for AlgebraBuilder<'b> {
             self.store_node(
                 UnaryNode {
                     op: node.op.clone().into(),
-                    tree: Box::new(en)
+                    tree: Rc::new(RefCell::new(en))
                 }.into()
             );
         }
@@ -262,6 +283,10 @@ impl<'b> ExprVisit for AlgebraBuilder<'b> {
             Some(a) => a,
             None => return
         };
+
+        let args: Box<[AlgebraNode]> = args.into_iter()
+            .map(|tree| Rc::new(RefCell::new(tree)))
+            .collect();
 
         let func = match self.context.get_function(&node.name.repr) {
             Some(f) => f,
@@ -307,16 +332,48 @@ pub trait AlgebraVisit {
     }
 
     fn visit_binary(&mut self, node: &BinaryNode) {
-        self.visit_tree(&node.left);
-        self.visit_tree(&node.right);
+        self.visit_tree(&node.left.borrow());
+        self.visit_tree(&node.right.borrow());
     }
 
     fn visit_unary(&mut self, node: &UnaryNode) {
-        self.visit_tree(&node.tree);
+        self.visit_tree(&node.tree.borrow());
     }
 
     fn visit_fn_call(&mut self, node: &FnCallNode) {
-        node.args.iter().for_each(|e| self.visit_tree(e));
+        node.args.iter().for_each(|e| self.visit_tree(&e.borrow()));
+    }
+}
+
+pub trait AlgebraVisitMut {
+    fn visit(&mut self, node: &mut AlgebraNode) {
+        self.visit_tree(node);
+    }
+
+    fn visit_tree(&mut self, node: &mut AlgebraNode) {
+        match *node.borrow_mut() {
+            AlgebraTree::Value(ref mut n) => self.visit_value(n),
+            AlgebraTree::Unary(ref mut n) => self.visit_unary(n),
+            AlgebraTree::Binary(ref mut n) => self.visit_binary(n),
+            AlgebraTree::FnCall(ref mut n) => self.visit_fn_call(n),
+        }
+    }
+
+    fn visit_value(&mut self, node: &mut ValueNode) {
+        let _ = node;
+    }
+
+    fn visit_binary(&mut self, node: &mut BinaryNode) {
+        self.visit_tree(&mut node.left);
+        self.visit_tree(&mut node.right);
+    }
+
+    fn visit_unary(&mut self, node: &mut UnaryNode) {
+        self.visit_tree(&mut node.tree);
+    }
+
+    fn visit_fn_call(&mut self, node: &mut FnCallNode) {
+        node.args.iter_mut().for_each(|e| self.visit_tree(e));
     }
 }
 
@@ -383,7 +440,7 @@ impl<'a> AlgebraVisit for Evaluator<'a> {
     }
 
     fn visit_unary(&mut self, node: &UnaryNode) {
-        self.visit_tree(&node.tree);
+        self.visit_tree(&node.tree.borrow());
         let inner_value = self.take_value();
         match node.op {
             AlgUnaryOp::Neg => self.store_value(- inner_value)
@@ -391,9 +448,9 @@ impl<'a> AlgebraVisit for Evaluator<'a> {
     }
 
     fn visit_binary(&mut self, node: &BinaryNode) {
-        self.visit_tree(&node.left);
+        self.visit_tree(&node.left.borrow());
         let left = self.take_value();
-        self.visit_tree(&node.right);
+        self.visit_tree(&node.right.borrow());
         let right = self.take_value();
 
         let value = match node.op {
@@ -410,7 +467,7 @@ impl<'a> AlgebraVisit for Evaluator<'a> {
     fn visit_fn_call(&mut self, node: &FnCallNode) {
         let mut args = Vec::new();
         for arg in node.args.iter() {
-            self.visit_tree(arg);
+            self.visit_tree(&arg.borrow());
             let arg_value = self.take_value();
             args.push(arg_value);
         }

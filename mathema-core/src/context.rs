@@ -2,7 +2,8 @@ use std::rc::Rc;
 use std::collections::HashMap;
 
 use crate::{
-    function::Function, intrinsics::{declare_constants, declare_functions},
+    function::Function,
+    intrinsics::{declare_constants, declare_functions},
 };
 
 pub trait Context {
@@ -11,15 +12,15 @@ pub trait Context {
         declare_functions(self as &mut dyn Context);
     }
 
-    fn set_variable(&mut self, name: Box<str>, value: f64);
+    fn set_variable(&mut self, name: String, value: f64);
     fn get_variable(&self, name: &str) -> Option<f64>;
-    fn set_function(&mut self, name: Box<str>, func: Function);
+    fn set_function(&mut self, name: String, func: Function);
     fn get_function(&self, name: &str) -> Option<Rc<Function>>;
 }
 
 pub struct ScopeContext {
-    variables: HashMap<Box<str>, f64>,
-    functions: HashMap<Box<str>, Rc<Function>>,
+    variables: HashMap<String, f64>,
+    functions: HashMap<String, Rc<Function>>,
 }
 
 impl Default for ScopeContext {
@@ -38,7 +39,7 @@ impl Context for ScopeContext {
         self.variables.get(name).copied()
     }
 
-    fn set_variable(&mut self, name: Box<str>, value: f64) {
+    fn set_variable(&mut self, name: String, value: f64) {
         self.variables.insert(name, value);
     }
 
@@ -46,7 +47,7 @@ impl Context for ScopeContext {
         self.functions.get(name).map(Rc::clone)
     }
 
-    fn set_function(&mut self, name: Box<str>, func: Function) {
+    fn set_function(&mut self, name: String, func: Function) {
         self.functions.insert(name, func.into());
     }
 }

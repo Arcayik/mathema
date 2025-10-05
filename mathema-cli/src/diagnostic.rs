@@ -41,11 +41,11 @@ impl From<ExprError> for Diagnostic {
     fn from(value: ExprError) -> Self {
         match value {
             ExprError::UndefinedVar(var) => Diagnostic {
-                msg: format!("Undefined Variable: {}", var.repr),
+                msg: format!("Undefined Variable: {}", var.name),
                 spans: vec![var.span]
             },
             ExprError::UndefinedFunc(func) => Diagnostic {
-                msg: format!("Undefined Function: {}", func.repr),
+                msg: format!("Undefined Function: {}", func.name),
                 spans: vec![func.span]
             },
             ExprError::BadFnCall(fn_name, args_span, args_off) => {
@@ -67,7 +67,7 @@ impl From<FunctionError> for Diagnostic {
         match value {
             FunctionError::ExprError(e) => e.into(),
             FunctionError::Recursion(func) => Diagnostic {
-                msg: format!("Recursive function call: {}", func.name.repr),
+                msg: format!("Recursive function call: {}", func.name.name),
                 spans: vec![func.span()]
             }
         }

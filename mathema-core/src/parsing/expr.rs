@@ -1,3 +1,4 @@
+use crate::name::Name;
 use super::{
     lexer::LexToken,
     parser::{ParseError, ParseStream},
@@ -9,7 +10,7 @@ use super::{
 pub enum ExprError {
     UndefinedVar(Ident),
     UndefinedFunc(Ident),
-    BadFnCall(Box<str>, Span, isize),
+    BadFnCall(Name, Span, isize),
 }
 
 pub enum Expr {
@@ -90,7 +91,7 @@ impl std::fmt::Debug for ExprValue {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Self::Literal(l) => write!(f, "{}", l.num),
-            Self::Ident(i) => write!(f, "{}", i.repr)
+            Self::Ident(i) => write!(f, "{}", i.name)
         }
     }
 }

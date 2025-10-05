@@ -218,10 +218,10 @@ impl<'b> ExprVisit for AlgebraBuilder<'b> {
             ),
             ExprValue::Ident(id) => {
                 // check if ident is a parameter, which takes priority
-                let new_node = if let Some(idx) = self.params.iter().position(|v| **v == *id.repr) {
+                let new_node = if let Some(idx) = self.params.iter().position(|v| **v == *id.name) {
                     ParamNode { idx }.into()
                 } else {
-                    let value = match self.context.get_variable(&id.repr) {
+                    let value = match self.context.get_variable(&*id.name) {
                         Some(v) => v,
                         None => {
                             self.errors.push(ExprError::UndefinedVar(id.clone()));
@@ -288,7 +288,7 @@ impl<'b> ExprVisit for AlgebraBuilder<'b> {
             .map(|tree| Rc::new(RefCell::new(tree)))
             .collect();
 
-        let func = match self.context.get_function(&node.name.repr) {
+        let func = match self.context.get_function(&node.name.name) {
             Some(f) => f,
             None => {
                 self.errors.push(ExprError::UndefinedFunc(node.name.clone()));
@@ -298,7 +298,7 @@ impl<'b> ExprVisit for AlgebraBuilder<'b> {
 
         let args_off = args.len() as isize - func.num_params() as isize;
         if args_off != 0 {
-            let name = node.name.repr.clone();
+            let name = node.name.name.clone();
             let span = node.parens.span();
             self.errors.push(ExprError::BadFnCall(name, span, args_off));
             return

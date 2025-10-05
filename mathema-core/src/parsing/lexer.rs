@@ -15,8 +15,8 @@ impl std::fmt::Display for LexToken {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let str = match self {
             LexToken::Literal(_) => Literal::display(),
-            LexToken::Ident(i) => i.repr.as_ref(),
-            LexToken::Punct(p) => p.repr.as_ref(),
+            LexToken::Ident(i) => i.name.as_ref(),
+            LexToken::Punct(p) => p.name.as_ref(),
             LexToken::Group(g, o) => &format!("{:?}({})", g.delim, o),
             LexToken::End(o) => &format!("end({})", o),
 
@@ -348,20 +348,20 @@ pub fn tokenize(input: &str) -> (TokenBuffer, Vec<LexError>) {
 }
 
 mod lexing {
-    use crate::parsing::{lexer::{Ident, LexToken, Punct, Tokenizer}, token::Literal};
+    use crate::{name::Name, parsing::{lexer::{Ident, LexToken, Punct, Tokenizer}, token::Literal}};
 
     pub fn punct(tokenizer: &mut Tokenizer) -> LexToken {
         let start = tokenizer.lexer.mark();
         let ch = tokenizer.lexer.next().expect("calling code must ensure remaining characters exist");
         let span = tokenizer.lexer.span_from(start);
-        LexToken::Punct(Punct { repr: ch.to_string().into(), span })
+        LexToken::Punct(Punct { name: Name::new(&ch.to_string()), span })
     }
 
     pub fn ident(tokenizer: &mut Tokenizer) -> LexToken {
         let start = tokenizer.lexer.mark();
         let ident_str = tokenizer.lexer.eat_while(|ch| ch.is_alphanumeric() || ch == '_');
         let span = tokenizer.lexer.span_from(start);
-        LexToken::Ident(Ident { repr: ident_str.into(), span })
+        LexToken::Ident(Ident { name: Name::new(ident_str), span })
     }
 
     pub fn literal(tokenizer: &mut Tokenizer) -> Option<LexToken> {

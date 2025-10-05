@@ -1,9 +1,10 @@
 use mathema_core::{
+    Name,
     algebra::{AlgebraBuilder, Evaluator},
     context::Context,
     function::{FunctionBuilder},
     intrinsics,
-    parsing::{token::Spanned, ast::{Stmt, Expr, VarDecl, FnDecl}}
+    parsing::{ast::{Stmt, Expr, VarDecl, FnDecl}}
 };
 
 use crate::Diagnostic;
@@ -11,8 +12,8 @@ use crate::Diagnostic;
 pub enum Outcome {
     ShowDiagnostics(Vec<Diagnostic>),
     ShowAnswer(f64),
-    AssignVar(Box<str>, f64),
-    DefineFn(Box<str>)
+    AssignVar(Name, f64),
+    DefineFn(Name)
 }
 
 pub fn process_statement(ctxt: &mut dyn Context, stmt: Stmt) -> Outcome {
@@ -34,12 +35,12 @@ pub fn process_expr(ctxt: &mut dyn Context, expr: Expr) -> Outcome {
     algebra.accept(&mut evaluator);
     let answer = evaluator.take_answer().unwrap();
 
-    ctxt.set_variable("ans".into(), answer);
+    ctxt.set_variable(String::from("ans"), answer);
     Outcome::ShowAnswer(answer)
 }
 
 pub fn process_var_decl(ctxt: &mut dyn Context, var_decl: VarDecl) -> Outcome {
-    let name = var_decl.var_name.repr.clone();
+    let name = var_decl.var_name.name.clone();
     let expr = var_decl.expr;
 
     let algebra = AlgebraBuilder::new(ctxt, vec![]).build(&expr);
@@ -59,21 +60,21 @@ pub fn process_var_decl(ctxt: &mut dyn Context, var_decl: VarDecl) -> Outcome {
         };
         Outcome::ShowDiagnostics(vec![diag])
     } else {
-        ctxt.set_variable(name.clone(), answer);
+        ctxt.set_variable(name.to_string(), answer);
         Outcome::AssignVar(name, answer)
     }
 }
 
 pub fn process_fn_decl(ctxt: &mut dyn Context, fn_decl: FnDecl) -> Outcome {
-    let name = fn_decl.sig.fn_name.repr.clone().into_string();
+    let name = fn_decl.sig.fn_name.name;
     let body = fn_decl.body;
     let params: Vec<_> = fn_decl.sig.inputs
         .iter()
         .cloned()
-        .map(|p| p.repr.into_string())
+        .map(|p| p.name.to_string())
         .collect();
 
-    let builder = FunctionBuilder::new(name.clone(), params, ctxt);
+    let builder = FunctionBuilder::new(name.to_string(), params, ctxt);
     let result = builder.build_function(body)
         .map_err(Diagnostic::from_vec);
 
@@ -82,12 +83,12 @@ pub fn process_fn_decl(ctxt: &mut dyn Context, fn_decl: FnDecl) -> Outcome {
             if intrinsics::BUILTIN_FUNCS.contains(&name.as_ref()) {
                 let diag = Diagnostic {
                     msg: format!("Cannot redefine built-in function '{name}'"),
-                    spans: vec![fn_decl.sig.fn_name.span()],
+                    spans: vec![fn_decl.sig.fn_name.span],
                 };
                 Outcome::ShowDiagnostics(vec![diag])
             } else {
-                ctxt.set_function(name.clone().into(), f);
-                Outcome::DefineFn(name.into())
+                ctxt.set_function(name.to_string(), f);
+                Outcome::DefineFn(name)
             }
         },
         Err(d) => Outcome::ShowDiagnostics(d)

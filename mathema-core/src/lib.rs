@@ -1,5 +1,4 @@
 pub mod algebra;
-pub mod function;
 pub mod context;
 pub mod intrinsics;
 #[macro_use]

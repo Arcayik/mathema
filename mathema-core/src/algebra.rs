@@ -1,11 +1,11 @@
 use std::{cell::RefCell, rc::Rc};
 
 use crate::{
-    context::Context, function::Function, 
+    context::{Context, FuncResult},
     parsing::{
-        ast::{Expr, ExprBinary, BinOp, ExprUnary, UnaryOp, ExprFnCall, ExprGroup, ExprValue, ExprError, ExprVisit},
+        ast::{BinOp, Expr, ExprBinary, ExprError, ExprFnCall, ExprGroup, ExprUnary, ExprValue, ExprVisit, UnaryOp},
         token::Spanned,
-    }
+    }, Name
 };
 
 #[derive(Debug)]
@@ -15,6 +15,21 @@ pub struct Algebra {
 }
 
 impl Algebra {
+    pub fn evaluate(&self, context: &dyn Context, args: &[f64]) -> Result<f64, EvalError> {
+        let args_off = args.len() as isize - self.params.len() as isize;
+        if args_off != 0 {
+            return Err(EvalError { args_off })
+        }
+
+        let mut eval = Evaluator::new(context, args);
+        self.accept(&mut eval);
+        Ok(eval.take_value())
+    }
+
+    pub fn num_params(&self) -> usize {
+        self.params.len()
+    }
+
     pub fn accept<V: AlgebraVisit>(&self, visitor: &mut V) {
         visitor.visit(&self.tree.borrow());
     }
@@ -162,7 +177,7 @@ impl From<UnaryOp> for AlgUnaryOp {
 #[derive(Debug, PartialEq)]
 pub struct FnCallNode {
     pub(crate) args: Box<[AlgebraNode]>,
-    pub(crate) func: std::rc::Rc<Function>
+    pub(crate) func: Name,
 }
 
 pub struct AlgebraBuilder<'b> {
@@ -288,17 +303,17 @@ impl<'b> ExprVisit for AlgebraBuilder<'b> {
             .map(|tree| Rc::new(RefCell::new(tree)))
             .collect();
 
-        let func = match self.context.get_function(&node.name.name) {
+        let func = match self.context.get_function(&node.fn_name.name) {
             Some(f) => f,
             None => {
-                self.errors.push(ExprError::UndefinedFunc(node.name.clone()));
+                self.errors.push(ExprError::UndefinedFunc(node.fn_name.clone()));
                 return
             }
         };
 
         let args_off = args.len() as isize - func.num_params() as isize;
         if args_off != 0 {
-            let name = node.name.name.clone();
+            let name = node.fn_name.name.clone();
             let span = node.parens.span();
             self.errors.push(ExprError::BadFnCall(name, span, args_off));
             return
@@ -306,7 +321,7 @@ impl<'b> ExprVisit for AlgebraBuilder<'b> {
 
         let new_node = FnCallNode {
             args,
-            func
+            func: node.fn_name.name.clone()
         }.into();
 
         self.store_node(new_node);
@@ -377,27 +392,31 @@ pub trait AlgebraVisitMut {
     }
 }
 
+pub struct EvalError {
+    args_off: isize
+}
+
+impl EvalError {
+    pub fn new(args_off: isize) -> Self {
+        EvalError { args_off }
+    }
+}
+
 pub struct Evaluator<'a> {
     args: &'a [f64],
-
+    context: &'a dyn Context,
     stored_value: Option<f64>,
+    errors: Vec<EvalError>
 }
 
 impl<'a> Evaluator<'a> {
-    pub fn new(args: &'a [f64]) -> Self {
+    pub fn new(context: &'a dyn Context, args: &'a [f64]) -> Self {
         Evaluator {
             args,
+            context,
             stored_value: None,
+            errors: Vec::new()
         }
-    }
-
-    pub fn run(&mut self, algebra: &AlgebraTree) -> f64 {
-        self.visit(algebra);
-        self.take_value()
-    }
-
-    pub fn take_answer(&mut self) -> Option<f64> {
-        self.stored_value.take()
     }
 
     pub fn get_args(&self) -> &[f64] {
@@ -472,9 +491,11 @@ impl<'a> AlgebraVisit for Evaluator<'a> {
             args.push(arg_value);
         }
 
-        let value = node.func.call(&args)
-            .expect("function args checked at expr conversion");
-        self.store_value(value);
+        let result = self.context.call_function(&node.func, &args);
+
+        if let FuncResult::Return(value) = result {
+            self.store_value(value);
+        }
     }
 
     fn visit_tree(&mut self, node: &AlgebraTree) {

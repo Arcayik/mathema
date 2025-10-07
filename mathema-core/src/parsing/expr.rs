@@ -315,20 +315,20 @@ impl Precedence {
 }
 
 pub struct ExprFnCall {
-    pub name: Ident,
+    pub fn_name: Ident,
     pub parens: Paren,
     pub inputs: Punctuated<Expr, Token![,]>
 }
 
 impl std::fmt::Debug for ExprFnCall {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{:?}({:?})", self.name, self.inputs)
+        write!(f, "{:?}({:?})", self.fn_name, self.inputs)
     }
 }
 
 impl Spanned for ExprFnCall {
     fn span(&self) -> Span {
-        let start = self.name.span().start;
+        let start = self.fn_name.span().start;
         let end = self.parens.span().end;
         Span { start, end }
     }
@@ -339,7 +339,7 @@ impl Parse for ExprFnCall {
         let name = input.parse()?;
         let parens = input.parse()?;
         Ok(ExprFnCall {
-            name,
+            fn_name: name,
             parens,
             inputs: parse_punctuated_group(input)?,
         })

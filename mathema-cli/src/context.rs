@@ -1,8 +1,7 @@
 use mathema_core::{
     Name,
-    algebra::{AlgebraBuilder, Evaluator},
+    algebra::AlgebraBuilder,
     context::Context,
-    function::{FunctionBuilder},
     intrinsics,
     parsing::{ast::{Stmt, Expr, VarDecl, FnDecl}}
 };
@@ -31,9 +30,10 @@ pub fn process_expr(ctxt: &mut dyn Context, expr: Expr) -> Outcome {
         Err(e) => return Outcome::ShowDiagnostics(Diagnostic::from_vec(e)),
     };
 
-    let mut evaluator = Evaluator::new(&[]);
-    algebra.accept(&mut evaluator);
-    let answer = evaluator.take_answer().unwrap();
+    let answer = match algebra.evaluate(ctxt, &[]) {
+        Ok(a) => a,
+        Err(_e) => todo!()
+    };
 
     ctxt.set_variable(String::from("ans"), answer);
     Outcome::ShowAnswer(answer)
@@ -49,11 +49,12 @@ pub fn process_var_decl(ctxt: &mut dyn Context, var_decl: VarDecl) -> Outcome {
         Err(e) => return Outcome::ShowDiagnostics(Diagnostic::from_vec(e)),
     };
 
-    let mut evaluator = Evaluator::new(&[]);
-    algebra.accept(&mut evaluator);
-    let answer = evaluator.take_answer().unwrap();
+    let answer = match algebra.evaluate(ctxt, &[]) {
+        Ok(a) => a,
+        Err(_e) => todo!()
+    };
 
-    if intrinsics::BUILTIN_VARS.contains(&name.as_ref()) {
+    if intrinsics::CONSTANTS.contains_key(&*name) {
         let diag = Diagnostic {
             msg: format!("Cannot redefine built-in var '{name}'"),
             spans: vec![var_decl.var_name.span]
@@ -74,13 +75,11 @@ pub fn process_fn_decl(ctxt: &mut dyn Context, fn_decl: FnDecl) -> Outcome {
         .map(|p| p.name.to_string())
         .collect();
 
-    let builder = FunctionBuilder::new(name.to_string(), params, ctxt);
-    let result = builder.build_function(body)
-        .map_err(Diagnostic::from_vec);
+    let result = AlgebraBuilder::new(ctxt, params).build(&body);
 
     match result {
         Ok(f) => {
-            if intrinsics::BUILTIN_FUNCS.contains(&name.as_ref()) {
+            if intrinsics::CONST_FNS.contains_key(&*name) {
                 let diag = Diagnostic {
                     msg: format!("Cannot redefine built-in function '{name}'"),
                     spans: vec![fn_decl.sig.fn_name.span],
@@ -91,6 +90,6 @@ pub fn process_fn_decl(ctxt: &mut dyn Context, fn_decl: FnDecl) -> Outcome {
                 Outcome::DefineFn(name)
             }
         },
-        Err(d) => Outcome::ShowDiagnostics(d)
+        Err(d) => Outcome::ShowDiagnostics(Diagnostic::from_vec(d))
     }
 }

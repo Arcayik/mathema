@@ -5,7 +5,6 @@ use mathema_core::{
         ast::ExprError,
         parser::ParseError,
     },
-    function::FunctionError
 };
 
 #[derive(Debug)]
@@ -58,18 +57,6 @@ impl From<ExprError> for Diagnostic {
                     spans: vec![args_span]
                 }
             },
-        }
-    }
-}
-
-impl From<FunctionError> for Diagnostic {
-    fn from(value: FunctionError) -> Self {
-        match value {
-            FunctionError::ExprError(e) => e.into(),
-            FunctionError::Recursion(func) => Diagnostic {
-                msg: format!("Recursive function call: {}", func.name.name),
-                spans: vec![func.span()]
-            }
         }
     }
 }

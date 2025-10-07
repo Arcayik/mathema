@@ -1,6 +1,6 @@
 use mathema_core::{
     Name,
-    algebra::AlgebraBuilder,
+    algebra::AlgebraConverter,
     context::Context,
     intrinsics,
     parsing::{ast::{Stmt, Expr, VarDecl, FnDecl}}
@@ -24,11 +24,7 @@ pub fn process_statement(ctxt: &mut Context, stmt: Stmt) -> Outcome {
 }
 
 pub fn process_expr(ctxt: &mut Context, expr: Expr) -> Outcome {
-    let algebra = AlgebraBuilder::new(ctxt, vec![]).build(&expr);
-    let algebra = match algebra {
-        Ok(a) => a,
-        Err(e) => return Outcome::ShowDiagnostics(Diagnostic::from_vec(e)),
-    };
+    let algebra = AlgebraConverter::new(vec![]).build(&expr);
 
     let answer = match algebra.evaluate(ctxt, &[]) {
         Ok(a) => a,
@@ -43,11 +39,7 @@ pub fn process_var_decl(ctxt: &mut Context, var_decl: VarDecl) -> Outcome {
     let name = var_decl.var_name.name.clone();
     let expr = var_decl.expr;
 
-    let algebra = AlgebraBuilder::new(ctxt, vec![]).build(&expr);
-    let algebra = match algebra {
-        Ok(a) => a,
-        Err(e) => return Outcome::ShowDiagnostics(Diagnostic::from_vec(e)),
-    };
+    let algebra = AlgebraConverter::new(vec![]).build(&expr);
 
     let answer = match algebra.evaluate(ctxt, &[]) {
         Ok(a) => a,
@@ -75,21 +67,16 @@ pub fn process_fn_decl(ctxt: &mut Context, fn_decl: FnDecl) -> Outcome {
         .map(|p| p.name.to_string())
         .collect();
 
-    let result = AlgebraBuilder::new(ctxt, params).build(&body);
+    let algebra = AlgebraConverter::new(params).build(&body);
 
-    match result {
-        Ok(f) => {
-            if intrinsics::CONST_FNS.contains_key(&*name) {
-                let diag = Diagnostic {
-                    msg: format!("Cannot redefine built-in function '{name}'"),
-                    spans: vec![fn_decl.sig.fn_name.span],
-                };
-                Outcome::ShowDiagnostics(vec![diag])
-            } else {
-                ctxt.set_func(name.to_string(), f);
-                Outcome::DefineFn(name)
-            }
-        },
-        Err(d) => Outcome::ShowDiagnostics(Diagnostic::from_vec(d))
+    if intrinsics::CONST_FNS.contains_key(&*name) {
+        let diag = Diagnostic {
+            msg: format!("Cannot redefine built-in function '{name}'"),
+            spans: vec![fn_decl.sig.fn_name.span],
+        };
+        Outcome::ShowDiagnostics(vec![diag])
+    } else {
+        ctxt.set_func(name.to_string(), algebra);
+        Outcome::DefineFn(name)
     }
 }

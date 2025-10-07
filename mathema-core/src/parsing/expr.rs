@@ -1,17 +1,9 @@
-use crate::name::Name;
 use super::{
     lexer::LexToken,
     parser::{ParseError, ParseStream},
     punctuated::Punctuated,
     stmt::parse_punctuated_group, token::{Delimiter, End, Ident, Literal, Paren, Parse, Span, Spanned, Token}
 };
-
-#[derive(Debug)]
-pub enum ExprError {
-    UndefinedVar(Ident),
-    UndefinedFunc(Ident),
-    BadFnCall(Name, Span, isize),
-}
 
 pub enum Expr {
     Value(ExprValue),

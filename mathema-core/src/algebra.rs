@@ -2,10 +2,8 @@ use std::{cell::RefCell, rc::Rc};
 
 use crate::{
     context::{Context, FuncResult},
-    parsing::{
-        ast::{BinOp, Expr, ExprBinary, ExprError, ExprFnCall, ExprGroup, ExprUnary, ExprValue, ExprVisit, UnaryOp},
-        token::Spanned,
-    }, Name
+    parsing::ast::{BinOp, Expr, ExprBinary, ExprFnCall, ExprGroup, ExprUnary, ExprValue, ExprVisit, UnaryOp},
+    Name
 };
 
 #[derive(Debug)]
@@ -18,7 +16,7 @@ impl Algebra {
     pub fn evaluate(&self, context: &Context, args: &[f64]) -> Result<f64, EvalError> {
         let args_off = args.len() as isize - self.params.len() as isize;
         if args_off != 0 {
-            return Err(EvalError { args_off })
+            return Err(EvalError::BadArgs(args_off))
         }
 
         let mut eval = Evaluator::new(context, args);
@@ -174,40 +172,33 @@ pub struct FnCallNode {
     pub(crate) func: Name,
 }
 
-pub struct AlgebraBuilder<'b> {
-    context: &'b Context,
+pub struct AlgebraConverter {
     stored_node: Option<AlgebraTree>,
     params: Vec<String>,
-    errors: Vec<ExprError>,
 }
 
-impl<'b> AlgebraBuilder<'b> {
-    pub fn new(context: &'b Context, params: Vec<String>) -> Self {
-        AlgebraBuilder {
-            context,
+impl AlgebraConverter {
+    pub fn new(params: Vec<String>) -> Self {
+        AlgebraConverter {
             params,
             stored_node: None,
-            errors: Vec::new()
         }
     }
 
-    pub fn build(mut self, expr: &Expr) -> Result<Algebra, Vec<ExprError>> {
-        if let Some(tree) = self.build_tree(expr) {
-            let tree = Rc::new(RefCell::new(tree));
-            let params = self.params;
-            Ok(Algebra { params, tree })
-        } else {
-            Err(self.errors)
-        }
+    pub fn build(mut self, expr: &Expr) -> Algebra {
+        let tree = self.build_tree(expr);
+        let tree = Rc::new(RefCell::new(tree));
+        let params = self.params;
+        Algebra { params, tree }
     }
 
-    fn build_tree(&mut self, expr: &Expr) -> Option<AlgebraTree> {
+    fn build_tree(&mut self, expr: &Expr) -> AlgebraTree {
         self.visit(expr);
         self.take_node()
     }
 
-    fn take_node(&mut self) -> Option<AlgebraTree> {
-        self.stored_node.take()
+    fn take_node(&mut self) -> AlgebraTree {
+        self.stored_node.take().expect("AlgebraConverter should have stored node to take")
     }
 
     fn store_node(&mut self, node: AlgebraTree) {
@@ -219,27 +210,14 @@ impl<'b> AlgebraBuilder<'b> {
     }
 }
 
-impl<'b> ExprVisit for AlgebraBuilder<'b> {
+impl ExprVisit for AlgebraConverter {
     fn visit_value(&mut self, node: &ExprValue) {
         match node {
             ExprValue::Literal(l) => self.store_node(
                 NumNode { value: l.num }.into()
             ),
             ExprValue::Ident(id) => {
-                // check if ident is a parameter, which takes priority
-                let new_node = if let Some(idx) = self.params.iter().position(|v| **v == *id.name) {
-                    ParamNode { idx }.into()
-                } else {
-                    let value = match self.context.get_var(&id.name) {
-                        Some(v) => v,
-                        None => {
-                            self.errors.push(ExprError::UndefinedVar(id.clone()));
-                            return
-                        }
-                    };
-                    NumNode { value }.into()
-                };
-
+                let new_node = todo!();
                 self.store_node(new_node)
             },
         }
@@ -251,29 +229,25 @@ impl<'b> ExprVisit for AlgebraBuilder<'b> {
         self.visit_expr(&node.rhs);
         let right = self.take_node();
 
-        if let (Some(l), Some(r)) = (left, right) {
-            self.store_node(
-                BinaryNode {
-                    left: Rc::new(RefCell::new(l)),
-                    op: node.op.clone().into(),
-                    right: Rc::new(RefCell::new(r)),
-                }.into()
-            )
-        }
+        self.store_node(
+            BinaryNode {
+                left: Rc::new(RefCell::new(left)),
+                op: node.op.clone().into(),
+                right: Rc::new(RefCell::new(right)),
+            }.into()
+        )
     }
 
     fn visit_unary(&mut self, node: &ExprUnary) {
         self.visit_expr(&node.expr);
-        let expr = self.take_node();
+        let expr_node = self.take_node();
 
-        if let Some(en) = expr {
-            self.store_node(
-                UnaryNode {
-                    op: node.op.clone().into(),
-                    tree: Rc::new(RefCell::new(en))
-                }.into()
-            );
-        }
+        self.store_node(
+            UnaryNode {
+                op: node.op.clone().into(),
+                tree: Rc::new(RefCell::new(expr_node))
+            }.into()
+        );
     }
 
     fn visit_group(&mut self, node: &ExprGroup) {
@@ -281,37 +255,13 @@ impl<'b> ExprVisit for AlgebraBuilder<'b> {
     }
 
     fn visit_fn_call(&mut self, node: &ExprFnCall) {
-        let args: Option<Box<[AlgebraTree]>> = node.inputs.iter()
+        let args: Box<[AlgebraNode]> = node.inputs.iter()
             .map(|expr| {
                 self.visit_expr(expr);
-                self.take_node()
+                let tree = self.take_node();
+                Rc::new(RefCell::new(tree))
             })
             .collect();
-
-        let args = match args {
-            Some(a) => a,
-            None => return
-        };
-
-        let args: Box<[AlgebraNode]> = args.into_iter()
-            .map(|tree| Rc::new(RefCell::new(tree)))
-            .collect();
-
-        let func = match self.context.get_func(&node.fn_name.name) {
-            Some(f) => f,
-            None => {
-                self.errors.push(ExprError::UndefinedFunc(node.fn_name.clone()));
-                return
-            }
-        };
-
-        let args_off = args.len() as isize - func.num_params() as isize;
-        if args_off != 0 {
-            let name = node.fn_name.name.clone();
-            let span = node.parens.span();
-            self.errors.push(ExprError::BadFnCall(name, span, args_off));
-            return
-        }
 
         let new_node = FnCallNode {
             args,
@@ -386,14 +336,10 @@ pub trait AlgebraVisitMut {
     }
 }
 
-pub struct EvalError {
-    args_off: isize
-}
-
-impl EvalError {
-    pub fn new(args_off: isize) -> Self {
-        EvalError { args_off }
-    }
+pub enum EvalError {
+    UndefinedVar(Name),
+    UndefinedFunc(Name),
+    BadArgs(isize),
 }
 
 pub struct Evaluator<'a> {

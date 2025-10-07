@@ -2,7 +2,6 @@ use mathema_core::{
     parsing::{
         token::{Span, Spanned},
         lexer::LexError,
-        ast::ExprError,
         parser::ParseError,
     },
 };
@@ -33,31 +32,6 @@ impl From<ParseError> for Diagnostic {
         Diagnostic {
             msg: value.to_string(),
             spans: vec![value.span()] }
-    }
-}
-
-impl From<ExprError> for Diagnostic {
-    fn from(value: ExprError) -> Self {
-        match value {
-            ExprError::UndefinedVar(var) => Diagnostic {
-                msg: format!("Undefined Variable: {}", var.name),
-                spans: vec![var.span]
-            },
-            ExprError::UndefinedFunc(func) => Diagnostic {
-                msg: format!("Undefined Function: {}", func.name),
-                spans: vec![func.span]
-            },
-            ExprError::BadFnCall(fn_name, args_span, args_off) => {
-                let many_or_few = if args_off > 0 { "many" }
-                else if args_off < 0 { "few" }
-                else { panic!("a function call can't be off by 0 arguments") };
-
-                Diagnostic {
-                    msg: format!("Too {} args for function '{}'", many_or_few, fn_name),
-                    spans: vec![args_span]
-                }
-            },
-        }
     }
 }
 

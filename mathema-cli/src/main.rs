@@ -6,7 +6,7 @@ use mathema_core::{
         parser::ParseBuffer, 
         ast::Stmt,
     },
-    context::ScopeContext,
+    context::Context,
 };
 
 mod context;
@@ -47,7 +47,7 @@ impl Prompt {
 }
 
 fn main() {
-    let mut context = ScopeContext::default();
+    let mut context = Context::default();
     let prompt = Prompt::new(">> ".to_string());
 
     loop {

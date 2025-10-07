@@ -15,7 +15,7 @@ pub enum Outcome {
     DefineFn(Name)
 }
 
-pub fn process_statement(ctxt: &mut dyn Context, stmt: Stmt) -> Outcome {
+pub fn process_statement(ctxt: &mut Context, stmt: Stmt) -> Outcome {
     match stmt {
         Stmt::Expr(expr) => process_expr(ctxt, expr),
         Stmt::VarDecl(var_decl) => process_var_decl(ctxt, var_decl),
@@ -23,7 +23,7 @@ pub fn process_statement(ctxt: &mut dyn Context, stmt: Stmt) -> Outcome {
     }
 }
 
-pub fn process_expr(ctxt: &mut dyn Context, expr: Expr) -> Outcome {
+pub fn process_expr(ctxt: &mut Context, expr: Expr) -> Outcome {
     let algebra = AlgebraBuilder::new(ctxt, vec![]).build(&expr);
     let algebra = match algebra {
         Ok(a) => a,
@@ -39,7 +39,7 @@ pub fn process_expr(ctxt: &mut dyn Context, expr: Expr) -> Outcome {
     Outcome::ShowAnswer(answer)
 }
 
-pub fn process_var_decl(ctxt: &mut dyn Context, var_decl: VarDecl) -> Outcome {
+pub fn process_var_decl(ctxt: &mut Context, var_decl: VarDecl) -> Outcome {
     let name = var_decl.var_name.name.clone();
     let expr = var_decl.expr;
 
@@ -66,7 +66,7 @@ pub fn process_var_decl(ctxt: &mut dyn Context, var_decl: VarDecl) -> Outcome {
     }
 }
 
-pub fn process_fn_decl(ctxt: &mut dyn Context, fn_decl: FnDecl) -> Outcome {
+pub fn process_fn_decl(ctxt: &mut Context, fn_decl: FnDecl) -> Outcome {
     let name = fn_decl.sig.fn_name.name;
     let body = fn_decl.body;
     let params: Vec<_> = fn_decl.sig.inputs

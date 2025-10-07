@@ -14,6 +14,10 @@ impl ConstFunc {
         ConstFunc { params, func }
     }
 
+    pub fn num_params(&self) -> usize {
+        self.params.len()
+    }
+
     pub fn call(&self, args: &[f64]) -> Result<f64, EvalError> {
         let args_off = args.len() as isize - self.params.len() as isize;
         if args_off != 0 {

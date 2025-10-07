@@ -15,7 +15,7 @@ pub struct Algebra {
 }
 
 impl Algebra {
-    pub fn evaluate(&self, context: &dyn Context, args: &[f64]) -> Result<f64, EvalError> {
+    pub fn evaluate(&self, context: &Context, args: &[f64]) -> Result<f64, EvalError> {
         let args_off = args.len() as isize - self.params.len() as isize;
         if args_off != 0 {
             return Err(EvalError { args_off })
@@ -131,17 +131,11 @@ pub enum AlgBinOp { Add, Sub, Mul, Div, Exp }
 
 impl AlgBinOp {
     pub fn is_additive(&self) -> bool {
-        match self {
-            AlgBinOp::Add | AlgBinOp::Sub => true,
-            _ => false,
-        }
+        matches!(self, AlgBinOp::Add | AlgBinOp::Sub)
     }
 
     pub fn is_multiplicative(&self) -> bool {
-        match self {
-            AlgBinOp::Mul | AlgBinOp::Div => true,
-            _ => false,
-        }
+        matches!(self, AlgBinOp::Mul | AlgBinOp::Div)
     }
 }
 
@@ -181,14 +175,14 @@ pub struct FnCallNode {
 }
 
 pub struct AlgebraBuilder<'b> {
-    context: &'b dyn Context,
+    context: &'b Context,
     stored_node: Option<AlgebraTree>,
     params: Vec<String>,
     errors: Vec<ExprError>,
 }
 
 impl<'b> AlgebraBuilder<'b> {
-    pub fn new(context: &'b dyn Context, params: Vec<String>) -> Self {
+    pub fn new(context: &'b Context, params: Vec<String>) -> Self {
         AlgebraBuilder {
             context,
             params,
@@ -236,7 +230,7 @@ impl<'b> ExprVisit for AlgebraBuilder<'b> {
                 let new_node = if let Some(idx) = self.params.iter().position(|v| **v == *id.name) {
                     ParamNode { idx }.into()
                 } else {
-                    let value = match self.context.get_variable(&*id.name) {
+                    let value = match self.context.get_variable(&id.name) {
                         Some(v) => v,
                         None => {
                             self.errors.push(ExprError::UndefinedVar(id.clone()));
@@ -260,9 +254,9 @@ impl<'b> ExprVisit for AlgebraBuilder<'b> {
         if let (Some(l), Some(r)) = (left, right) {
             self.store_node(
                 BinaryNode {
-                    left: Rc::new(RefCell::new(l.into())),
+                    left: Rc::new(RefCell::new(l)),
                     op: node.op.clone().into(),
-                    right: Rc::new(RefCell::new(r.into())),
+                    right: Rc::new(RefCell::new(r)),
                 }.into()
             )
         }
@@ -404,13 +398,13 @@ impl EvalError {
 
 pub struct Evaluator<'a> {
     args: &'a [f64],
-    context: &'a dyn Context,
+    context: &'a Context,
     stored_value: Option<f64>,
     errors: Vec<EvalError>
 }
 
 impl<'a> Evaluator<'a> {
-    pub fn new(context: &'a dyn Context, args: &'a [f64]) -> Self {
+    pub fn new(context: &'a Context, args: &'a [f64]) -> Self {
         Evaluator {
             args,
             context,

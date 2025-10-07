@@ -12,35 +12,35 @@ pub struct Context {
 }
 
 impl Context {
-    pub fn set_variable(&mut self, name: String, value: f64) {
+    pub fn set_var(&mut self, name: String, value: f64) {
         self.variables.insert(name, value);
     }
 
-    pub fn get_variable(&self, name: &str) -> Option<f64> {
+    pub fn get_var(&self, name: &str) -> Option<f64> {
         self.variables.get(name).copied()
     }
 
-    pub fn has_variable(&self, name: &str) -> bool {
+    pub fn has_var(&self, name: &str) -> bool {
         self.variables.contains_key(name)
     }
 
-    pub fn set_function(&mut self, name: String, algebra: Algebra) {
+    pub fn set_func(&mut self, name: String, algebra: Algebra) {
         self.functions.insert(name, algebra);
     }
 
-    fn get_builtin_fn(&self, name: &str) -> Option<&ConstFunc> {
+    fn get_builtin_func(&self, name: &str) -> Option<&ConstFunc> {
         intrinsics::CONST_FNS.get(name)
     }
 
-    pub fn get_function(&self, name: &str) -> Option<Function<'_>> {
-        if let Some(func) = self.get_builtin_fn(name) {
+    pub fn get_func(&self, name: &str) -> Option<Function<'_>> {
+        if let Some(func) = self.get_builtin_func(name) {
             return Some(Function::Builtin(func));
         }
 
         self.functions.get(name).map(Function::UserDefined)
     }
 
-    pub fn call_function(&self, name: &str, args: &[f64]) -> FuncResult {
+    pub fn call_func(&self, name: &str, args: &[f64]) -> FuncResult {
         let func = match self.functions.get(name) {
             Some(f) => f,
             None => return FuncResult::NotFound
@@ -51,7 +51,7 @@ impl Context {
             .unwrap_or_else(FuncResult::Error)
     }
 
-    pub fn has_function(&self, name: &str) -> bool {
+    pub fn has_func(&self, name: &str) -> bool {
         self.functions.contains_key(name)
     }
 }

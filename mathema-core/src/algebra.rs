@@ -230,7 +230,7 @@ impl<'b> ExprVisit for AlgebraBuilder<'b> {
                 let new_node = if let Some(idx) = self.params.iter().position(|v| **v == *id.name) {
                     ParamNode { idx }.into()
                 } else {
-                    let value = match self.context.get_variable(&id.name) {
+                    let value = match self.context.get_var(&id.name) {
                         Some(v) => v,
                         None => {
                             self.errors.push(ExprError::UndefinedVar(id.clone()));
@@ -297,7 +297,7 @@ impl<'b> ExprVisit for AlgebraBuilder<'b> {
             .map(|tree| Rc::new(RefCell::new(tree)))
             .collect();
 
-        let func = match self.context.get_function(&node.fn_name.name) {
+        let func = match self.context.get_func(&node.fn_name.name) {
             Some(f) => f,
             None => {
                 self.errors.push(ExprError::UndefinedFunc(node.fn_name.clone()));
@@ -485,7 +485,7 @@ impl<'a> AlgebraVisit for Evaluator<'a> {
             args.push(arg_value);
         }
 
-        let result = self.context.call_function(&node.func, &args);
+        let result = self.context.call_func(&node.func, &args);
 
         if let FuncResult::Return(value) = result {
             self.store_value(value);

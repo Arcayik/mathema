@@ -35,7 +35,7 @@ pub fn process_expr(ctxt: &mut Context, expr: Expr) -> Outcome {
         Err(_e) => todo!()
     };
 
-    ctxt.set_variable(String::from("ans"), answer);
+    ctxt.set_var(String::from("ans"), answer);
     Outcome::ShowAnswer(answer)
 }
 
@@ -61,7 +61,7 @@ pub fn process_var_decl(ctxt: &mut Context, var_decl: VarDecl) -> Outcome {
         };
         Outcome::ShowDiagnostics(vec![diag])
     } else {
-        ctxt.set_variable(name.to_string(), answer);
+        ctxt.set_var(name.to_string(), answer);
         Outcome::AssignVar(name, answer)
     }
 }
@@ -86,7 +86,7 @@ pub fn process_fn_decl(ctxt: &mut Context, fn_decl: FnDecl) -> Outcome {
                 };
                 Outcome::ShowDiagnostics(vec![diag])
             } else {
-                ctxt.set_function(name.to_string(), f);
+                ctxt.set_func(name.to_string(), f);
                 Outcome::DefineFn(name)
             }
         },

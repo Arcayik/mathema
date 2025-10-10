@@ -21,11 +21,15 @@ impl Context {
     }
 
     pub fn has_var(&self, name: &str) -> bool {
-        self.variables.contains_key(name)
+        self.get_builtin_var(name).is_some() || self.variables.contains_key(name)
     }
 
     pub fn set_func(&mut self, name: String, algebra: Algebra) {
         self.functions.insert(name, algebra);
+    }
+
+    fn get_builtin_var(&self, name: &str) -> Option<&f64> {
+        intrinsics::CONSTANTS.get(name)
     }
 
     fn get_builtin_func(&self, name: &str) -> Option<&ConstFunc> {
@@ -48,7 +52,7 @@ impl Context {
 
         func.evaluate(self, args)
             .map(FuncResult::Return)
-            .unwrap_or_else(FuncResult::Error)
+            .unwrap_or_else(FuncResult::Errors)
     }
 
     pub fn has_func(&self, name: &str) -> bool {
@@ -72,6 +76,6 @@ impl Function<'_> {
 
 pub enum FuncResult {
     Return(f64),
-    Error(EvalError),
+    Errors(Vec<EvalError>),
     NotFound,
 }

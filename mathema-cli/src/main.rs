@@ -1,18 +1,11 @@
 use std::io::Write;
 
 use mathema_core::{
-    parsing::{
-        lexer::tokenize,
-        parser::ParseBuffer, 
-        ast::Stmt,
-    },
-    context::Context,
+    context::{mathema_parse, Context, MathemaError, Outcome},
+    Name
 };
 
-mod context;
 mod diagnostic;
-
-use context::{Outcome, process_statement};
 use diagnostic::Diagnostic;
 
 pub struct Prompt {
@@ -44,6 +37,14 @@ impl Prompt {
     pub fn show_answer(&self, answer: f64) {
         println!("{}", answer);
     }
+
+    pub fn show_var_decl(&self, name: &Name, value: f64) {
+        println!("set {name} to {value}");
+    }
+
+    pub fn show_fn_decl(&self, name: &Name) {
+        println!("defined {name}()");
+    }
 }
 
 fn main() {
@@ -55,32 +56,25 @@ fn main() {
         if input.is_empty() { continue }
         if input == "exit" { break }
 
-        let ast = parse_ast(&input);
-        if let Err(errors) = ast {
-            errors.iter().for_each(|d| prompt.show_diagnostic(d));
-            continue;
-        }
-        let stmt = ast.unwrap();
-
-        let process_result = process_statement(&mut context, stmt);
-        match process_result {
-            Outcome::ShowAnswer(ans) => prompt.show_answer(ans),
-            Outcome::ShowDiagnostics(diags) => diags.iter().for_each(|d| prompt.show_diagnostic(d)),
-            Outcome::AssignVar(..) => {},
-            Outcome::DefineFn(..) => {},
+        let result = mathema_parse(&mut context, &input);
+        match result {
+            Ok(outcome) => handle_outcome(&prompt, outcome),
+            Err(errs) => handle_errors(&prompt, errs)
         }
     }
 }
 
-fn parse_ast<T: ToString>(input: T) -> Result<Stmt, Vec<Diagnostic>> {
-    let input = input.to_string();
-    let (tokens, errors) = tokenize(&input);
-
-    if !errors.is_empty() {
-        return Err(Diagnostic::from_vec(errors))
+fn handle_outcome(state: &Prompt, outcome: Outcome) {
+    match outcome {
+        Outcome::Answer(ans) => state.show_answer(ans),
+        Outcome::Var(ref n, v) => state.show_var_decl(n, v),
+        Outcome::Fn(ref n) => state.show_fn_decl(n),
     }
-
-    let parser = ParseBuffer::new(tokens);
-    parser.parse().map_err(|e| vec![e.into()])
 }
 
+fn handle_errors(state: &Prompt, errors: Vec<MathemaError>) {
+    for e in errors {
+        let diag: Diagnostic = e.into();
+        state.show_diagnostic(&diag);
+    }
+}

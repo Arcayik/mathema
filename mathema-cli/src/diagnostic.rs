@@ -1,9 +1,7 @@
 use mathema_core::{
-    parsing::{
-        token::{Span, Spanned},
-        lexer::LexError,
-        parser::ParseError,
-    },
+    algebra::EvalError, context::MathemaError, parsing::{
+        lexer::LexError, parser::ParseError, token::{Span, Spanned}
+    }
 };
 
 #[derive(Debug)]
@@ -32,6 +30,31 @@ impl From<ParseError> for Diagnostic {
         Diagnostic {
             msg: value.to_string(),
             spans: vec![value.span()] }
+    }
+}
+
+impl From<EvalError> for Diagnostic {
+    fn from(value: EvalError) -> Self {
+        let msg = match value {
+            EvalError::UndefinedVar(name) => format!("Undefined variable: {name}"),
+            EvalError::UndefinedFunc(name) => format!("Undefined function: {name}"),
+            EvalError::BadArgs(..) => todo!()
+        };
+
+        Diagnostic {
+            msg,
+            spans: Vec::new()
+        }
+    }
+}
+
+impl From<MathemaError> for Diagnostic {
+    fn from(value: MathemaError) -> Self {
+        match value {
+            MathemaError::Lexing(e) => e.into(),
+            MathemaError::Parsing(e) => e.into(),
+            MathemaError::Eval(e) => e.into()
+        }
     }
 }
 

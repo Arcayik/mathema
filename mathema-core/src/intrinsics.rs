@@ -21,7 +21,8 @@ impl ConstFunc {
     pub fn call(&self, args: &[f64]) -> Result<f64, EvalError> {
         let args_off = args.len() as isize - self.params.len() as isize;
         if args_off != 0 {
-            return Err(EvalError::BadArgs(args_off))
+            todo!()
+            // return Err(EvalError::BadArgs(args_off))
         }
 
         Ok((self.func)(args))

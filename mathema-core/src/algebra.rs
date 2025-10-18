@@ -2,7 +2,10 @@ use std::{cell::RefCell, rc::Rc};
 
 use crate::{
     context::{Context, FuncResult},
-    parsing::ast::{BinOp, Expr, ExprBinary, ExprFnCall, ExprGroup, ExprUnary, ExprValue, ExprVisit, UnaryOp},
+    parsing::{
+        ast::{BinOp, Expr, ExprBinary, ExprFnCall, ExprGroup, ExprUnary, ExprValue, ExprVisit, UnaryOp},
+        token::Span
+    },
     Name
 };
 
@@ -16,7 +19,8 @@ impl Algebra {
     pub fn evaluate(&self, context: &Context, args: &[f64]) -> Result<f64, Vec<EvalError>> {
         let args_off = args.len() as isize - self.params.len() as isize;
         if args_off != 0 {
-            return Err(vec![EvalError::BadArgs(args_off)])
+            todo!()
+            // return Err(vec![EvalError::BadArgs(args_off)])
         }
 
         let mut eval = Evaluator::new(context, args);
@@ -347,10 +351,22 @@ pub trait AlgebraVisitMut {
     }
 }
 
-pub enum EvalError {
+pub enum EvalErrorKind {
     UndefinedVar(Name),
     UndefinedFunc(Name),
     BadArgs(isize),
+}
+
+pub struct EvalError {
+    kind: EvalErrorKind,
+    source: Rc<str>,
+    span: Span
+}
+
+impl EvalError {
+    pub fn new(kind: EvalErrorKind, source: Rc<str>, span: Span) -> Self {
+        EvalError { kind, source, span }
+    }
 }
 
 pub struct Evaluator<'a> {
@@ -370,17 +386,17 @@ impl<'a> Evaluator<'a> {
         }
     }
 
+    fn error(&mut self, kind: EvalErrorKind) {
+        let source = todo!();
+        let span = todo!();
+        let err = EvalError::new(kind, source, span);
+        self.errors.push(err);
+    }
+
     fn eval_variable(&mut self, name: &Name) {
         match self.context.get_var(name) {
             Some(var) => self.store_value(var),
-            None => self.errors.push(EvalError::UndefinedVar(name.clone())),
-        };
-    }
-
-    fn eval_func(&mut self, name: &Name) {
-        match self.context.get_func(name) {
-            Some(func) => Ok(func.num_params()),
-            None => Err(EvalError::UndefinedFunc(name.clone()))
+            None => self.error(EvalErrorKind::UndefinedVar(name.clone())),
         };
     }
 

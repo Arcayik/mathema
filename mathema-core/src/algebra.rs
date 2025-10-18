@@ -39,10 +39,6 @@ impl Algebra {
     pub fn accept<V: AlgebraVisit>(&self, visitor: &mut V) {
         visitor.visit(&self.tree.borrow());
     }
-
-    pub fn accept_mut<V: AlgebraVisitMut>(&mut self, visitor: &mut V) {
-        visitor.visit(&mut self.tree);
-    }
 }
 
 pub(crate) type AlgebraNode = Rc<RefCell<AlgebraTree>>;
@@ -316,38 +312,6 @@ pub trait AlgebraVisit {
 
     fn visit_fn_call(&mut self, node: &FnCallNode) {
         node.args.iter().for_each(|e| self.visit_tree(&e.borrow()));
-    }
-}
-
-pub trait AlgebraVisitMut {
-    fn visit(&mut self, node: &mut AlgebraNode) {
-        self.visit_tree(node);
-    }
-
-    fn visit_tree(&mut self, node: &mut AlgebraNode) {
-        match *node.borrow_mut() {
-            AlgebraTree::Value(ref mut n) => self.visit_value(n),
-            AlgebraTree::Unary(ref mut n) => self.visit_unary(n),
-            AlgebraTree::Binary(ref mut n) => self.visit_binary(n),
-            AlgebraTree::FnCall(ref mut n) => self.visit_fn_call(n),
-        }
-    }
-
-    fn visit_value(&mut self, node: &mut ValueNode) {
-        let _ = node;
-    }
-
-    fn visit_binary(&mut self, node: &mut BinaryNode) {
-        self.visit_tree(&mut node.left);
-        self.visit_tree(&mut node.right);
-    }
-
-    fn visit_unary(&mut self, node: &mut UnaryNode) {
-        self.visit_tree(&mut node.tree);
-    }
-
-    fn visit_fn_call(&mut self, node: &mut FnCallNode) {
-        node.args.iter_mut().for_each(|e| self.visit_tree(e));
     }
 }
 

@@ -1,5 +1,5 @@
 use mathema_core::{
-    algebra::EvalError, context::MathemaError, parsing::{
+    algebra::{EvalError, EvalErrorKind}, context::MathemaError, parsing::{
         lexer::LexError, parser::ParseError, token::{Span, Spanned}
     }
 };
@@ -35,10 +35,10 @@ impl From<ParseError> for Diagnostic {
 
 impl From<EvalError> for Diagnostic {
     fn from(value: EvalError) -> Self {
-        let msg = match value {
-            EvalError::UndefinedVar(name) => format!("Undefined variable: {name}"),
-            EvalError::UndefinedFunc(name) => format!("Undefined function: {name}"),
-            EvalError::BadArgs(..) => todo!()
+        let msg = match value.kind {
+            EvalErrorKind::UndefinedVar(_name) => todo!(),
+            EvalErrorKind::UndefinedFunc(_name) => todo!(),
+            EvalErrorKind::BadArgs(..) => todo!()
         };
 
         Diagnostic {

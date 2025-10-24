@@ -151,8 +151,8 @@ pub fn process_fn_decl(context: &mut Context, fn_decl: FnDecl) -> Result<Outcome
     let body = fn_decl.body;
     let params: Vec<_> = fn_decl.sig.inputs
         .iter()
+        .map(|p| &p.name)
         .cloned()
-        .map(|p| p.name.to_string())
         .collect();
 
     let algebra = AlgebraConverter::new(params).build(&body);

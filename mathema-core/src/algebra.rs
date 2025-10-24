@@ -11,7 +11,7 @@ use crate::{
 
 #[derive(Debug)]
 pub struct Algebra {
-    pub(crate) params: Vec<String>,
+    pub(crate) params: Vec<Name>,
     pub(crate) tree: AlgebraNode,
 }
 
@@ -23,21 +23,12 @@ impl Algebra {
             // return Err(vec![EvalError::BadArgs(args_off)])
         }
 
-        let mut eval = Evaluator::new(context, args);
-        self.accept(&mut eval);
-        if let Some(value) = eval.take_value() {
-            Ok(value)
-        } else {
-            Err(eval.errors)
-        }
+        let value = Evaluator::run(self, context, args);
+        todo!()
     }
 
     pub fn num_params(&self) -> usize {
         self.params.len()
-    }
-
-    pub fn accept<V: AlgebraVisit>(&self, visitor: &mut V) {
-        visitor.visit(&self);
     }
 }
 
@@ -57,21 +48,15 @@ impl From<ValueNode> for AlgebraTree {
     }
 }
 
-impl From<NumNode> for AlgebraTree {
-    fn from(value: NumNode) -> Self {
+impl From<f64> for AlgebraTree {
+    fn from(value: f64) -> Self {
         ValueNode::Num(value).into()
     }
 }
 
-impl From<f64> for AlgebraTree {
-    fn from(value: f64) -> Self {
-        NumNode { value }.into()
-    }
-}
-
-impl From<IdentNode> for AlgebraTree {
-    fn from(value: IdentNode) -> Self {
-        ValueNode::Id(value).into()
+impl From<Name> for AlgebraTree {
+    fn from(value: Name) -> Self {
+        ValueNode::Var(value).into()
     }
 }
 
@@ -94,32 +79,9 @@ impl From<FnCallNode> for AlgebraTree {
 }
 
 #[derive(Debug, PartialEq)]
-pub struct NumNode {
-    pub(crate) value: f64
-}
-
-#[derive(Debug, PartialEq)]
-pub enum IdentNode {
-    Param(usize),
-    Var(Name),
-}
-
-#[derive(Debug, PartialEq)]
 pub enum ValueNode {
-    Num(NumNode),
-    Id(IdentNode),
-}
-
-impl From<NumNode> for ValueNode {
-    fn from(value: NumNode) -> Self {
-        Self::Num(value)
-    }
-}
-
-impl From<IdentNode> for ValueNode {
-    fn from(value: IdentNode) -> Self {
-        Self::Id(value)
-    }
+    Num(f64),
+    Var(Name),
 }
 
 #[derive(Debug, PartialEq)]
@@ -179,11 +141,11 @@ pub struct FnCallNode {
 
 pub struct AlgebraConverter {
     stored_node: Option<AlgebraTree>,
-    params: Vec<String>,
+    params: Vec<Name>,
 }
 
 impl AlgebraConverter {
-    pub fn new(params: Vec<String>) -> Self {
+    pub fn new(params: Vec<Name>) -> Self {
         AlgebraConverter {
             params,
             stored_node: None,
@@ -217,21 +179,12 @@ impl AlgebraConverter {
 
 impl ExprVisit for AlgebraConverter {
     fn visit_value(&mut self, node: &ExprValue) {
-        match node {
-            ExprValue::Literal(l) => self.store_node(
-                NumNode { value: l.num }.into()
-            ),
-            ExprValue::Ident(id) => {
-                // param or var
-                let param_idx = self.params.iter().position(|p| *p == *id.name);
-                let new_node = if let Some(idx) = param_idx {
-                    IdentNode::Param(idx)
-                } else {
-                    IdentNode::Var(id.name.clone())
-                };
-                self.store_node(new_node.into())
-            },
-        }
+        let new_node = match node {
+            ExprValue::Literal(l) => ValueNode::Num(l.num),
+            ExprValue::Ident(id) => ValueNode::Var(id.name.clone())
+        };
+
+        self.store_node(new_node.into())
     }
 
     fn visit_binary(&mut self, node: &ExprBinary) {
@@ -354,20 +307,28 @@ impl EvalError {
 }
 
 pub struct Evaluator<'a> {
+    input: &'a Algebra,
     args: &'a [f64],
     context: &'a Context,
+
     stored_value: Option<f64>,
     errors: Vec<EvalError>
 }
 
 impl<'a> Evaluator<'a> {
-    pub fn new(context: &'a Context, args: &'a [f64]) -> Self {
+    fn new(input: &'a Algebra, context: &'a Context, args: &'a [f64]) -> Self {
         Evaluator {
+            input,
             args,
             context,
             stored_value: None,
             errors: Vec::new()
         }
+    }
+
+    pub fn run(algebra: &'a Algebra, context: &'a Context, args: &'a [f64]) -> f64 {
+        let eval = Evaluator::new(algebra, context, args);
+        todo!()
     }
 
     fn error(&mut self, kind: EvalErrorKind) {
@@ -378,6 +339,8 @@ impl<'a> Evaluator<'a> {
     }
 
     fn eval_variable(&mut self, name: &Name) {
+        // TODO check param
+
         match self.context.get_var(name) {
             Some(var) => self.store_value(var),
             None => self.error(EvalErrorKind::UndefinedVar(name.clone())),
@@ -409,11 +372,8 @@ impl<'a> AlgebraVisit for Evaluator<'a> {
 
     fn visit_value(&mut self, node: &ValueNode) {
         match node {
-            ValueNode::Num(n) => self.store_value(n.value),
-            ValueNode::Id(v) => match v {
-                IdentNode::Param(idx) => self.store_value(self.args[*idx]),
-                IdentNode::Var(name) => self.eval_variable(name)
-            }
+            ValueNode::Num(n) => self.store_value(*n),
+            ValueNode::Var(v) => self.eval_variable(v)
         };
     }
 

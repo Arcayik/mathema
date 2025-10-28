@@ -1,36 +1,9 @@
 use std::{collections::HashMap, sync::LazyLock};
 
-use crate::algebra::EvalError;
-
 type IntrinsicFn = fn(&[f64]) -> f64;
 
-pub struct ConstFunc {
-    params: &'static [&'static str],
-    func: IntrinsicFn,
-}
-
-impl ConstFunc {
-    pub(crate) fn new(params: &'static [&str], func: IntrinsicFn) -> Self {
-        ConstFunc { params, func }
-    }
-
-    pub fn num_params(&self) -> usize {
-        self.params.len()
-    }
-
-    pub fn call(&self, args: &[f64]) -> Result<f64, EvalError> {
-        let args_off = args.len() as isize - self.params.len() as isize;
-        if args_off != 0 {
-            todo!()
-            // return Err(EvalError::BadArgs(args_off))
-        }
-
-        Ok((self.func)(args))
-    }
-}
-
 pub static CONSTANTS: LazyLock<HashMap<String, f64>> = LazyLock::new(declare_constants);
-pub static CONST_FNS: LazyLock<HashMap<String, ConstFunc>> = LazyLock::new(declare_functions);
+pub static CONST_FNS: LazyLock<HashMap<String, IntrinsicFn>> = LazyLock::new(declare_functions);
 
 macro_rules! define_constants {
     ( $( $name:ident = $def:expr ;)* ) => {
@@ -48,13 +21,10 @@ macro_rules! define_functions {
     (
         $( $name:ident ( $($args:ident),* ) = $body:expr ; )*
     ) => {
-        pub(crate) fn declare_functions() -> HashMap<String, ConstFunc> {
+        pub(crate) fn declare_functions() -> HashMap<String, IntrinsicFn> {
             let mut hashmap = HashMap::new();
             $(
-                let args = &[
-                    $( stringify!($args) ),*
-                ];
-                let func = ConstFunc::new(args, $body);
+                let func: IntrinsicFn = $body;
                 hashmap.insert(stringify!($name).into(), func)
             );*;
             hashmap

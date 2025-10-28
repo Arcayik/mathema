@@ -1,8 +1,8 @@
 use std::collections::HashMap;
 
 use crate::{
-    algebra::{Algebra, AlgebraConverter, EvalError},
-    intrinsics::{self, ConstFunc},
+    algebra::{Function, AlgebraConverter, EvalError},
+    intrinsics,
     parsing::{
         ast::{Stmt, Expr, VarDecl, FnDecl},
         lexer::{tokenize, LexError},
@@ -14,51 +14,43 @@ use crate::{
 #[derive(Default)]
 pub struct Context {
     variables: HashMap<String, f64>,
-    functions: HashMap<String, Algebra>,
+    functions: HashMap<String, Function>,
 }
 
 impl Context {
-    pub fn set_var(&mut self, name: String, value: f64) {
+    pub fn set_variable(&mut self, name: String, value: f64) {
         self.variables.insert(name, value);
     }
 
-    pub fn get_var(&self, name: &str) -> Option<f64> {
+    pub fn get_variable(&self, name: &str) -> Option<f64> {
         self.variables.get(name).copied()
     }
 
-    pub fn has_var(&self, name: &str) -> bool {
-        self.get_builtin_var(name).is_some() || self.variables.contains_key(name)
+    pub fn has_variable(&self, name: &str) -> bool {
+        self.get_builtin_variable(name).is_some() || self.variables.contains_key(name)
     }
 
-    pub fn set_func(&mut self, name: String, algebra: Algebra) {
+    pub fn set_function(&mut self, name: String, algebra: Function) {
         self.functions.insert(name, algebra);
     }
 
-    fn get_builtin_var(&self, name: &str) -> Option<&f64> {
+    fn get_builtin_variable(&self, name: &str) -> Option<&f64> {
         intrinsics::CONSTANTS.get(name)
     }
 
-    fn get_builtin_func(&self, name: &str) -> Option<&ConstFunc> {
+    fn get_builtin_function(&self, name: &str) -> Option<&fn(&[f64])->f64> {
         intrinsics::CONST_FNS.get(name)
     }
 
-    pub fn get_func(&self, name: &str) -> Option<Function<'_>> {
-        if let Some(func) = self.get_builtin_func(name) {
-            return Some(Function::Builtin(func));
-        }
-
-        self.functions.get(name).map(Function::UserDefined)
-    }
-
-    pub fn call_func(&self, name: &str, args: &[f64]) -> FuncResult {
+    pub fn call_func(&self, name: &str, args: &[f64]) -> Result<f64, CallError> {
         let func = match self.functions.get(name) {
             Some(f) => f,
-            None => return FuncResult::NotFound
+            None => return Err(CallError::NotFound)
         };
 
         func.evaluate(self, args)
-            .map(FuncResult::Return)
-            .unwrap_or_else(FuncResult::Errors)
+            .map(Ok)
+            .map_err(CallError::Errors)?
     }
 
     pub fn has_func(&self, name: &str) -> bool {
@@ -66,24 +58,10 @@ impl Context {
     }
 }
 
-pub enum FuncResult {
-    Return(f64),
+pub enum CallError {
     Errors(Vec<EvalError>),
+    BadArgs(isize),
     NotFound,
-}
-
-pub enum Function<'a> {
-    UserDefined(&'a Algebra),
-    Builtin(&'a ConstFunc)
-}
-
-impl Function<'_> {
-    pub fn num_params(&self) -> usize {
-        match self {
-            Self::UserDefined(alg) => alg.num_params(),
-            Self::Builtin(func) => func.num_params()
-        }
-    }
 }
 
 pub enum MathemaError {
@@ -126,7 +104,7 @@ fn process_statement(context: &mut Context, stmt: Stmt) -> Result<Outcome, Vec<E
 fn process_expr(context: &mut Context, expr: Expr) -> Result<Outcome, Vec<EvalError>> {
     let algebra = AlgebraConverter::new(vec![]).build(&expr);
     let answer = algebra.evaluate(context, &[])?;
-    context.set_var(String::from("ans"), answer);
+    context.set_variable(String::from("ans"), answer);
     Ok(Outcome::Answer(answer))
 }
 
@@ -140,7 +118,7 @@ fn process_var_decl(context: &mut Context, var_decl: VarDecl) -> Result<Outcome,
     if intrinsics::CONSTANTS.contains_key(&*name) {
         todo!()
     } else {
-        context.set_var(name.to_string(), answer);
+        context.set_variable(name.to_string(), answer);
     }
 
     Ok(Outcome::Var(name, answer))
@@ -160,7 +138,7 @@ pub fn process_fn_decl(context: &mut Context, fn_decl: FnDecl) -> Result<Outcome
     if intrinsics::CONST_FNS.contains_key(&*name) {
         todo!()
     } else {
-        context.set_func(name.to_string(), algebra);
+        context.set_function(name.to_string(), algebra);
     }
 
     Ok(Outcome::Fn(name))

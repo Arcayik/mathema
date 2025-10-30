@@ -1,9 +1,6 @@
-use std::rc::Rc;
-
 use crate::{
     context::{CallError, Context}, function::{FnArgs, Function}, parsing::{
         ast::{BinOp, Expr, ExprBinary, ExprFnCall, ExprGroup, ExprUnary, ExprValue, ExprVisit, Stmt, UnaryOp},
-        token::Span
     }, Name
 };
 
@@ -90,7 +87,6 @@ impl From<FnCall> for AlgExpr {
 pub enum Value {
     Num(f64),
     Var(Name),
-    Param(usize)
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -144,7 +140,7 @@ impl From<UnaryOp> for AlgUnaryOp {
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct FnCall {
-    pub(crate) args: Vec<Box<AlgExpr>>,
+    pub(crate) args: Vec<AlgExpr>,
     pub(crate) func: Name,
 }
 
@@ -195,11 +191,8 @@ impl ExprVisit for ExprToAlgebra {
     }
 
     fn visit_fn_call(&mut self, node: &ExprFnCall) -> Self::Result {
-        let args: Vec<Box<AlgExpr>> = node.inputs.iter()
-            .map(|expr| {
-                let tree = self.visit_expr(expr);
-                Box::new(tree)
-            })
+        let args: Vec<AlgExpr> = node.inputs.iter()
+            .map(|expr| self.visit_expr(expr))
             .collect();
 
         FnCall {
@@ -266,7 +259,7 @@ pub trait AlgebraFold {
     fn fold_fn_call(&mut self, fn_call: FnCall) -> FnCall {
         let args = fn_call.args
             .into_iter()
-            .map(|a| Box::new(self.fold_expr(*a)))
+            .map(|a| self.fold_expr(a))
             .collect();
         let func = fn_call.func;
         FnCall { args, func }
@@ -281,19 +274,18 @@ pub enum EvalErrorKind {
 
 pub struct EvalError {
     pub kind: EvalErrorKind,
-    pub(crate) source: Rc<str>,
-    pub(crate) span: Span
+    // pub(crate) source: Rc<str>,
+    // pub(crate) span: Span
 }
 
 impl EvalError {
-    pub fn new(kind: EvalErrorKind, source: Rc<str>, span: Span) -> Self {
-        EvalError { kind, source, span }
+    pub fn new(kind: EvalErrorKind) -> Self {
+        EvalError { kind }
     }
 }
 
 pub struct Evaluator<'a> {
     context: &'a Context,
-    args: &'a [f64],
     errors: Vec<EvalError>
 }
 
@@ -301,14 +293,8 @@ impl<'a> Evaluator<'a> {
     pub fn new(context: &'a Context) -> Self {
         Evaluator {
             context,
-            args: &[],
             errors: Vec::new()
         }
-    }
-
-    pub fn with_args(mut self, args: &'a [f64]) -> Self {
-        self.args = args;
-        self
     }
 
     pub fn take_errors(&mut self) -> Vec<EvalError> {
@@ -316,9 +302,7 @@ impl<'a> Evaluator<'a> {
     }
 
     fn store_error(&mut self, kind: EvalErrorKind) {
-        let source = todo!();
-        let span = todo!();
-        let err = EvalError::new(kind, source, span);
+        let err = EvalError::new(kind);
         self.errors.push(err);
     }
 
@@ -332,29 +316,19 @@ impl<'a> Evaluator<'a> {
             None
         }
     }
-
-    fn eval_parameter(&mut self, idx: usize) -> Option<f64> {
-        self.args.get(idx).copied()
-    }
 }
 
 impl<'a> AlgebraVisit for Evaluator<'a> {
     type Result = Option<f64>;
 
     fn visit_expr(&mut self, node: &AlgExpr) -> Self::Result {
-        match node {
-            AlgExpr::Value(n) => self.visit_value(n),
-            AlgExpr::Unary(n) => self.visit_unary(n),
-            AlgExpr::Binary(n) => self.visit_binary(n),
-            AlgExpr::FnCall(n) => self.visit_fn_call(n),
-        }
+        visit::walk_expr(self, node)
     }
 
     fn visit_value(&mut self, node: &Value) -> Self::Result {
         match node {
             Value::Num(n) => Some(*n),
             Value::Var(v) => self.eval_variable(v),
-            Value::Param(idx) => self.eval_parameter(*idx)
         }
     }
 
@@ -383,7 +357,7 @@ impl<'a> AlgebraVisit for Evaluator<'a> {
 
     fn visit_fn_call(&mut self, node: &FnCall) -> Self::Result {
         let args: Vec<f64> = node.args.iter()
-            .map(|node| self.visit_expr(&node))
+            .map(|node| self.visit_expr(node))
             .collect::<Option<_>>()?;
 
         self.context.call_func(&node.func, &args)

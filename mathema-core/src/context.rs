@@ -39,18 +39,20 @@ impl Context {
         intrinsics::CONSTANTS.get(name)
     }
 
-    fn get_builtin_function(&self, name: &str) -> Option< &fn(&[f64])->f64 > {
+    fn get_builtin_function(&self, name: &str) -> Option<&fn(&[f64]) -> f64> {
         intrinsics::CONST_FNS.get(name)
     }
 
     pub fn call_func(&self, name: &str, args: &[f64]) -> Result<f64, CallError> {
-        let func = match self.functions.get(name) {
-            Some(f) => f,
-            None => return Err(CallError::NotFound)
-        };
+        if let Some(func) = self.get_builtin_function(name) {
+            return Ok((func)(args))
+        }
 
-        func.evaluate(self, args)
-            .map(Ok)?
+        if let Some(func) = self.functions.get(name) {
+            func.evaluate(self, args)
+        } else {
+            Err(CallError::NotFound)
+        }
     }
 
     pub fn has_func(&self, name: &str) -> bool {

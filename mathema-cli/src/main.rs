@@ -38,8 +38,8 @@ impl Prompt {
         println!("{}", answer);
     }
 
-    pub fn show_var_decl(&self, name: &Name, value: f64) {
-        println!("set {name} to {value}");
+    pub fn show_var_decl(&self, name: &Name) {
+        println!("declared {name}");
     }
 
     pub fn show_fn_decl(&self, name: &Name) {
@@ -67,7 +67,7 @@ fn main() {
 fn handle_outcome(state: &Prompt, outcome: Outcome) {
     match outcome {
         Outcome::Answer(ans) => state.show_answer(ans),
-        Outcome::Var(ref n, v) => state.show_var_decl(n, v),
+        Outcome::Var(ref n) => state.show_var_decl(n),
         Outcome::Fn(ref n) => state.show_fn_decl(n),
     }
 }

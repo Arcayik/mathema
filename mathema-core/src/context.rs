@@ -1,10 +1,11 @@
 use std::collections::HashMap;
 
 use crate::{
-    algebra::{Function, AlgebraConverter, EvalError},
+    algebra::{AlgExpr, AlgebraVisit, EvalError, Evaluator, ExprToAlgebra},
+    function::Function,
     intrinsics,
     parsing::{
-        ast::{Stmt, Expr, VarDecl, FnDecl},
+        ast::{Expr, ExprVisit, FnDecl, Stmt, VarDecl},
         lexer::{tokenize, LexError},
         parser::{ParseBuffer, ParseError},
     },
@@ -13,32 +14,32 @@ use crate::{
 
 #[derive(Default)]
 pub struct Context {
-    variables: HashMap<String, f64>,
+    variables: HashMap<String, AlgExpr>,
     functions: HashMap<String, Function>,
 }
 
 impl Context {
-    pub fn set_variable(&mut self, name: String, value: f64) {
+    pub fn set_variable(&mut self, name: String, value: AlgExpr) {
         self.variables.insert(name, value);
     }
 
-    pub fn get_variable(&self, name: &str) -> Option<f64> {
-        self.variables.get(name).copied()
+    pub fn get_variable(&self, name: &str) -> Option<&AlgExpr> {
+        self.variables.get(name)
     }
 
     pub fn has_variable(&self, name: &str) -> bool {
         self.get_builtin_variable(name).is_some() || self.variables.contains_key(name)
     }
 
-    pub fn set_function(&mut self, name: String, algebra: Function) {
-        self.functions.insert(name, algebra);
+    pub fn set_function(&mut self, name: String, body: Function) {
+        self.functions.insert(name, body);
     }
 
     fn get_builtin_variable(&self, name: &str) -> Option<&f64> {
         intrinsics::CONSTANTS.get(name)
     }
 
-    fn get_builtin_function(&self, name: &str) -> Option<&fn(&[f64])->f64> {
+    fn get_builtin_function(&self, name: &str) -> Option< &fn(&[f64])->f64 > {
         intrinsics::CONST_FNS.get(name)
     }
 
@@ -49,8 +50,7 @@ impl Context {
         };
 
         func.evaluate(self, args)
-            .map(Ok)
-            .map_err(CallError::Errors)?
+            .map(Ok)?
     }
 
     pub fn has_func(&self, name: &str) -> bool {
@@ -59,8 +59,8 @@ impl Context {
 }
 
 pub enum CallError {
-    Errors(Vec<EvalError>),
     BadArgs(isize),
+    Eval(Vec<EvalError>),
     NotFound,
 }
 
@@ -72,7 +72,7 @@ pub enum MathemaError {
 
 pub enum Outcome {
     Answer(f64),
-    Var(Name, f64),
+    Var(Name),
     Fn(Name)
 }
 
@@ -87,44 +87,40 @@ pub fn mathema_parse(context: &mut Context, input: &str) -> Result<Outcome, Vec<
     let stmt = parsebuffer.parse::<Stmt>()
         .map_err(|e| vec![MathemaError::Parsing(e)])?;
 
-    let outcome = process_statement(context, stmt)
-        .map_err(|e| e.into_iter().map(MathemaError::Eval).collect::<Vec<_>>());
-
-    outcome
-}
-
-fn process_statement(context: &mut Context, stmt: Stmt) -> Result<Outcome, Vec<EvalError>> {
-    match stmt {
-        Stmt::Expr(expr) => process_expr(context, expr),
-        Stmt::VarDecl(var_decl) => process_var_decl(context, var_decl),
-        Stmt::FnDecl(fn_decl) => process_fn_decl(context, fn_decl)
-    }
+    todo!()
 }
 
 fn process_expr(context: &mut Context, expr: Expr) -> Result<Outcome, Vec<EvalError>> {
-    let algebra = AlgebraConverter::new(vec![]).build(&expr);
-    let answer = algebra.evaluate(context, &[])?;
-    context.set_variable(String::from("ans"), answer);
-    Ok(Outcome::Answer(answer))
+    let algebra = ExprToAlgebra.visit_expr(&expr);
+
+    let mut eval = Evaluator::new(context, &[]);
+    let result = eval.visit_expr(&algebra);
+
+    let ret = match result {
+        Some(value) => Ok(Outcome::Answer(value)),
+        None => Err(eval.take_errors())
+    };
+
+    context.set_variable(String::from("ans"), algebra);
+    ret
 }
 
-fn process_var_decl(context: &mut Context, var_decl: VarDecl) -> Result<Outcome, Vec<EvalError>> {
+fn process_var_decl(context: &mut Context, var_decl: VarDecl) -> Result<Outcome, CallError> {
     let name = var_decl.var_name.name.clone();
     let expr = var_decl.expr;
 
-    let algebra = AlgebraConverter::new(vec![]).build(&expr);
-    let answer = algebra.evaluate(context, &[])?;
+    let algebra = ExprToAlgebra.visit_expr(&expr);
 
     if intrinsics::CONSTANTS.contains_key(&*name) {
-        todo!()
+        todo!();
     } else {
-        context.set_variable(name.to_string(), answer);
+        context.set_variable(name.to_string(), algebra);
     }
 
-    Ok(Outcome::Var(name, answer))
+    Ok(Outcome::Var(name))
 }
 
-pub fn process_fn_decl(context: &mut Context, fn_decl: FnDecl) -> Result<Outcome, Vec<EvalError>> {
+pub fn process_fn_decl(context: &mut Context, fn_decl: FnDecl) -> Result<Outcome, CallError> {
     let name = fn_decl.sig.fn_name.name;
     let body = fn_decl.body;
     let params: Vec<_> = fn_decl.sig.inputs
@@ -133,7 +129,8 @@ pub fn process_fn_decl(context: &mut Context, fn_decl: FnDecl) -> Result<Outcome
         .cloned()
         .collect();
 
-    let algebra = AlgebraConverter::new(params).build(&body);
+    let alg = ExprToAlgebra.visit_expr(&body);
+    let algebra = Function::new(alg, params);
 
     if intrinsics::CONST_FNS.contains_key(&*name) {
         todo!()

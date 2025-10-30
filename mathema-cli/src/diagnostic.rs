@@ -38,7 +38,7 @@ impl From<EvalError> for Diagnostic {
         let msg = match value.kind {
             EvalErrorKind::UndefinedVar(_name) => todo!(),
             EvalErrorKind::UndefinedFunc(_name) => todo!(),
-            EvalErrorKind::BadArgs(..) => todo!()
+            EvalErrorKind::BadFnCall(..) => todo!()
         };
 
         Diagnostic {

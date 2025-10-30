@@ -339,40 +339,14 @@ impl Parse for ExprFnCall {
 }
 
 pub trait ExprVisit {
-    fn visit(&mut self, node: &Expr) {
-        self.visit_expr(node);
-    }
+    type Result;
 
-    fn visit_expr(&mut self, node: &Expr) {
-        match node {
-            Expr::Value(e) => self.visit_value(e),
-            Expr::Binary(e) => self.visit_binary(e),
-            Expr::Unary(e) => self.visit_unary(e),
-            Expr::Group(e) => self.visit_group(e),
-            Expr::FnCall(e) => self.visit_fn_call(e),
-        }
-    }
-
-    fn visit_value(&mut self, node: &ExprValue) {
-        let _ = node;
-    }
-
-    fn visit_binary(&mut self, node: &ExprBinary) {
-        self.visit_expr(&node.lhs);
-        self.visit_expr(&node.rhs);
-    }
-
-    fn visit_unary(&mut self, node: &ExprUnary) {
-        self.visit_expr(&node.expr);
-    }
-
-    fn visit_group(&mut self, node: &ExprGroup) {
-        self.visit_expr(&node.expr);
-    }
-
-    fn visit_fn_call(&mut self, node: &ExprFnCall) {
-        node.inputs.iter().for_each(|e| self.visit_expr(e));
-    }
+    fn visit_expr(&mut self, node: &Expr) -> Self::Result;
+    fn visit_value(&mut self, node: &ExprValue) -> Self::Result;
+    fn visit_binary(&mut self, node: &ExprBinary) -> Self::Result;
+    fn visit_unary(&mut self, node: &ExprUnary) -> Self::Result;
+    fn visit_fn_call(&mut self, node: &ExprFnCall) -> Self::Result;
+    fn visit_group(&mut self, node: &ExprGroup) -> Self::Result;
 }
 
 mod parsing {

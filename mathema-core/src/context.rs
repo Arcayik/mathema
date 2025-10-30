@@ -1,11 +1,11 @@
 use std::collections::HashMap;
 
 use crate::{
-    algebra::{AlgExpr, AlgebraVisit, EvalError, Evaluator, ExprToAlgebra},
+    algebra::{AlgExpr, AlgStmt, AlgebraVisit, EvalError, Evaluator},
     function::Function,
     intrinsics,
     parsing::{
-        ast::{Expr, ExprVisit, FnDecl, Stmt, VarDecl},
+        ast::Stmt,
         lexer::{tokenize, LexError},
         parser::{ParseBuffer, ParseError},
     },
@@ -65,9 +65,9 @@ pub enum CallError {
 }
 
 pub enum MathemaError {
-    Lexing(LexError),
-    Parsing(ParseError),
-    Eval(EvalError)
+    Lexing(Vec<LexError>),
+    Parsing(Vec<ParseError>),
+    Eval(Vec<EvalError>)
 }
 
 pub enum Outcome {
@@ -76,67 +76,38 @@ pub enum Outcome {
     Fn(Name)
 }
 
-pub fn mathema_parse(context: &mut Context, input: &str) -> Result<Outcome, Vec<MathemaError>> {
+pub fn mathema_parse(context: &mut Context, input: &str) -> Result<Outcome, MathemaError> {
     let (buffer, errors) = tokenize(input);
     if !errors.is_empty() {
-        let errs = errors.into_iter().map(MathemaError::Lexing).collect();
-        return Err(errs)
+        return Err(MathemaError::Lexing(errors));
     }
 
     let parsebuffer = ParseBuffer::new(buffer);
     let stmt = parsebuffer.parse::<Stmt>()
-        .map_err(|e| vec![MathemaError::Parsing(e)])?;
+        .map_err(|e| MathemaError::Parsing(vec![e]))?;
 
-    todo!()
+    let alg_stmt = AlgStmt::from_expr_stmt(&stmt);
+    process_algebra_stmt(context, alg_stmt)
 }
 
-fn process_expr(context: &mut Context, expr: Expr) -> Result<Outcome, Vec<EvalError>> {
-    let algebra = ExprToAlgebra.visit_expr(&expr);
-
-    let mut eval = Evaluator::new(context, &[]);
-    let result = eval.visit_expr(&algebra);
-
-    let ret = match result {
-        Some(value) => Ok(Outcome::Answer(value)),
-        None => Err(eval.take_errors())
-    };
-
-    context.set_variable(String::from("ans"), algebra);
-    ret
+fn process_algebra_stmt(context: &mut Context, alg_stmt: AlgStmt) -> Result<Outcome, MathemaError> {
+    match alg_stmt {
+        AlgStmt::Expr(expr) => {
+            let mut eval = Evaluator::new(context, &[]);
+            if let Some(ans) = eval.visit_expr(&expr) {
+                Ok(Outcome::Answer(ans))
+            } else {
+                Err(MathemaError::Eval(eval.take_errors()))
+            }
+        },
+        AlgStmt::VarDecl(name, expr) => {
+            context.set_variable(name.to_string(), expr);
+            Ok(Outcome::Var(name))
+        },
+        AlgStmt::FnDecl(name, func) => {
+            context.set_function(name.to_string(), func);
+            Ok(Outcome::Fn(name))
+        }
+    } 
 }
 
-fn process_var_decl(context: &mut Context, var_decl: VarDecl) -> Result<Outcome, CallError> {
-    let name = var_decl.var_name.name.clone();
-    let expr = var_decl.expr;
-
-    let algebra = ExprToAlgebra.visit_expr(&expr);
-
-    if intrinsics::CONSTANTS.contains_key(&*name) {
-        todo!();
-    } else {
-        context.set_variable(name.to_string(), algebra);
-    }
-
-    Ok(Outcome::Var(name))
-}
-
-pub fn process_fn_decl(context: &mut Context, fn_decl: FnDecl) -> Result<Outcome, CallError> {
-    let name = fn_decl.sig.fn_name.name;
-    let body = fn_decl.body;
-    let params: Vec<_> = fn_decl.sig.inputs
-        .iter()
-        .map(|p| &p.name)
-        .cloned()
-        .collect();
-
-    let alg = ExprToAlgebra.visit_expr(&body);
-    let algebra = Function::new(alg, params);
-
-    if intrinsics::CONST_FNS.contains_key(&*name) {
-        todo!()
-    } else {
-        context.set_function(name.to_string(), algebra);
-    }
-
-    Ok(Outcome::Fn(name))
-}

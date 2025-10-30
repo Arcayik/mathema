@@ -59,7 +59,7 @@ fn main() {
         let result = mathema_parse(&mut context, &input);
         match result {
             Ok(outcome) => handle_outcome(&prompt, outcome),
-            Err(errs) => handle_errors(&prompt, errs)
+            Err(errs) => handle_error(&prompt, errs)
         }
     }
 }
@@ -72,9 +72,6 @@ fn handle_outcome(state: &Prompt, outcome: Outcome) {
     }
 }
 
-fn handle_errors(state: &Prompt, errors: Vec<MathemaError>) {
-    for e in errors {
-        let diag: Diagnostic = e.into();
-        state.show_diagnostic(&diag);
-    }
+fn handle_error(state: &Prompt, error: MathemaError) {
+    todo!()
 }

@@ -17,7 +17,7 @@ pub enum AlgStmt {
 }
 
 impl AlgStmt {
-    pub fn from_expr_stmt(&mut self, stmt: &Stmt) -> Self {
+    pub fn from_expr_stmt(stmt: &Stmt) -> Self {
         match stmt {
             Stmt::Expr(expr) => {
                 let alg = ExprToAlgebra.visit_expr(expr);

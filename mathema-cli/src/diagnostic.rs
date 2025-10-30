@@ -50,11 +50,7 @@ impl From<EvalError> for Diagnostic {
 
 impl From<MathemaError> for Diagnostic {
     fn from(value: MathemaError) -> Self {
-        match value {
-            MathemaError::Lexing(e) => e.into(),
-            MathemaError::Parsing(e) => e.into(),
-            MathemaError::Eval(e) => e.into()
-        }
+        todo!()
     }
 }
 

@@ -1,13 +1,10 @@
 use std::rc::Rc;
 
 use crate::{
-    context::{CallError, Context},
-    parsing::{
+    context::{CallError, Context}, function::{FnArgs, Function}, parsing::{
         ast::{BinOp, Expr, ExprBinary, ExprFnCall, ExprGroup, ExprUnary, ExprValue, ExprVisit, Stmt, UnaryOp},
         token::Span
-    },
-    function::{Function},
-    Name
+    }, Name
 };
 
 pub enum AlgStmt {
@@ -32,10 +29,13 @@ impl AlgStmt {
                 let name = &decl.sig.fn_name.name;
                 let alg = ExprToAlgebra.visit_expr(&decl.body);
 
-                let params: Vec<Name> = decl.sig.inputs
+                let arg_vec: Vec<Name> = decl.sig.inputs
                     .iter()
-                    .map(|i| i.name.clone()).collect();
-                let func = Function::new(alg, params);
+                    .map(|i| i.name.clone())
+                    .collect();
+                let args = FnArgs::from_vec(arg_vec);
+
+                let func = Function::new(alg, args);
                 AlgStmt::FnDecl(name.clone(), func)
             }
         }

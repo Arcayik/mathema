@@ -6,19 +6,18 @@ use crate::{
 
 #[derive(Debug)]
 pub struct Function {
-    pub(crate) params: Vec<Name>,
+    pub(crate) args: FnArgs,
     pub(crate) body: Box<AlgExpr>,
 }
 
 impl Function {
-    pub fn new(algebra: AlgExpr, params: Vec<Name>) -> Self {
-        let body = AlgebraToFunctionBody::new(&params).fold_expr(algebra);
-        let body = Box::new(body);
-        Function { params, body }
+    pub fn new(algebra: AlgExpr, args: FnArgs) -> Self {
+        let body = Box::new(algebra);
+        Function { args, body }
     }
 
     pub fn evaluate(&self, context: &Context, args: &[f64]) -> Result<f64, CallError> {
-        let args_off = args.len() as isize - self.params.len() as isize;
+        let args_off = args.len() as isize - self.args.len() as isize;
         if args_off != 0 {
             return Err(CallError::BadArgs(args_off))
         }
@@ -32,15 +31,65 @@ impl Function {
     }
 
     pub fn num_params(&self) -> usize {
-        self.params.len()
+        self.args.len()
+    }
+}
+
+#[derive(Clone, Debug)]
+pub struct FnArgs(Vec<Name>);
+
+impl FnArgs {
+    pub fn empty() -> Self {
+        Self(Vec::new())
+    }
+
+    pub fn from_vec(mut vec: Vec<Name>) -> Self {
+        vec.dedup();
+        Self(vec)
+    }
+
+    pub fn push(&mut self, arg: &Name) -> Result<(), ()> {
+        if self.arg_check(arg) {
+            self.0.push(arg.clone());
+            Ok(())
+        } else {
+            Err(())
+        }
+    }
+
+    pub fn insert(&mut self, idx: usize, arg: &Name) -> Result<(), ()> {
+        if self.arg_check(arg) {
+            self.0.insert(idx, arg.clone());
+            Ok(())
+        } else {
+            Err(())
+        }
+    }
+
+    pub fn len(&self) -> usize {
+        self.0.len()
+    }
+
+    pub fn get_args(&self) -> &[Name] {
+        self.0.as_slice()
+    }
+
+    pub fn take_args(&mut self) -> Vec<Name> {
+        std::mem::take(&mut self.0)
+    }
+
+    pub fn iter(&self) -> std::slice::Iter<'_, Name> {
+        self.0.iter()
+    }
+
+    fn arg_check(&self, arg: &Name) -> bool {
+        !self.0.contains(arg)
     }
 }
 
 pub(crate) struct AlgebraToFunctionBody<'a> {
     params: &'a [Name]
 }
-
-// TODO: FnArgs newtype to uphold invariants (same name, etc.)
 
 impl<'a> AlgebraToFunctionBody<'a> {
     pub fn new(params: &'a [Name]) -> Self {

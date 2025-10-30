@@ -32,7 +32,9 @@ impl AlgStmt {
                 let name = &decl.sig.fn_name.name;
                 let alg = ExprToAlgebra.visit_expr(&decl.body);
 
-                let params: Vec<Name> = decl.sig.inputs.iter().map(|i| i.name.clone()).collect();
+                let params: Vec<Name> = decl.sig.inputs
+                    .iter()
+                    .map(|i| i.name.clone()).collect();
                 let func = Function::new(alg, params);
                 AlgStmt::FnDecl(name.clone(), func)
             }
@@ -296,12 +298,17 @@ pub struct Evaluator<'a> {
 }
 
 impl<'a> Evaluator<'a> {
-    pub fn new(context: &'a Context, args: &'a [f64]) -> Self {
+    pub fn new(context: &'a Context) -> Self {
         Evaluator {
             context,
-            args,
+            args: &[],
             errors: Vec::new()
         }
+    }
+
+    pub fn with_args(mut self, args: &'a [f64]) -> Self {
+        self.args = args;
+        self
     }
 
     pub fn take_errors(&mut self) -> Vec<EvalError> {
@@ -318,7 +325,7 @@ impl<'a> Evaluator<'a> {
     fn eval_variable(&mut self, name: &Name) -> Option<f64> {
         let var = self.context.get_variable(name);
         if let Some(expr) = var {
-            let mut eval = Evaluator::new(self.context, &[]);
+            let mut eval = Evaluator::new(self.context);
             eval.visit_expr(expr)
         } else {
             self.store_error(EvalErrorKind::UndefinedVar(name.clone()));

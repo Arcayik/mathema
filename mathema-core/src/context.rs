@@ -93,7 +93,7 @@ pub fn mathema_parse(context: &mut Context, input: &str) -> Result<Outcome, Math
 fn process_algebra_stmt(context: &mut Context, alg_stmt: AlgStmt) -> Result<Outcome, MathemaError> {
     match alg_stmt {
         AlgStmt::Expr(expr) => {
-            let mut eval = Evaluator::new(context, &[]);
+            let mut eval = Evaluator::new(context);
             if let Some(ans) = eval.visit_expr(&expr) {
                 Ok(Outcome::Answer(ans))
             } else {

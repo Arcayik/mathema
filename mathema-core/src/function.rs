@@ -23,7 +23,7 @@ impl Function {
             return Err(CallError::BadArgs(args_off))
         }
 
-        let mut eval = Evaluator::new(context, args);
+        let mut eval = Evaluator::new(context).with_args(args);
         if let Some(value) = eval.visit_expr(&self.body) {
             Ok(value)
         } else {

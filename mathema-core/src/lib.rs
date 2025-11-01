@@ -7,3 +7,5 @@ pub mod parsing;
 
 mod name;
 pub use name::Name;
+
+mod symbol;

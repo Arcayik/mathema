@@ -1,13 +1,14 @@
 use crate::{
-    context::{CallError, Context}, function::{FnArgs, Function}, parsing::{
-        ast::{BinOp, Expr, ExprBinary, ExprFnCall, ExprGroup, ExprUnary, ExprValue, ExprVisit, Stmt, UnaryOp},
-    }, Name
+    context::{CallError, Context},
+    function::{FnArgs, Function},
+    parsing::ast::{BinOp, Expr, ExprBinary, ExprFnCall, ExprGroup, ExprUnary, ExprValue, ExprVisit, Stmt, UnaryOp},
+    symbol::Symbol
 };
 
 pub enum AlgStmt {
     Expr(AlgExpr),
-    VarDecl(Name, AlgExpr),
-    FnDecl(Name, Function),
+    VarDecl(Symbol, AlgExpr),
+    FnDecl(Symbol, Function),
 }
 
 impl AlgStmt {
@@ -18,22 +19,22 @@ impl AlgStmt {
                 AlgStmt::Expr(alg)
             },
             Stmt::VarDecl(decl) => {
-                let name = &decl.var_name.name;
+                let name = decl.var_name.symbol;
                 let alg = ExprToAlgebra.visit_expr(&decl.expr);
-                AlgStmt::VarDecl(name.clone(), alg)
+                AlgStmt::VarDecl(name, alg)
             },
             Stmt::FnDecl(decl) => {
-                let name = &decl.sig.fn_name.name;
+                let name = decl.sig.fn_name.symbol;
                 let alg = ExprToAlgebra.visit_expr(&decl.body);
 
-                let arg_vec: Vec<Name> = decl.sig.inputs
+                let arg_vec: Vec<Symbol> = decl.sig.inputs
                     .iter()
-                    .map(|i| i.name.clone())
+                    .map(|i| i.symbol)
                     .collect();
                 let args = FnArgs::from_vec(arg_vec);
 
                 let func = Function::new(alg, args);
-                AlgStmt::FnDecl(name.clone(), func)
+                AlgStmt::FnDecl(name, func)
             }
         }
     }
@@ -59,8 +60,8 @@ impl From<f64> for AlgExpr {
     }
 }
 
-impl From<Name> for AlgExpr {
-    fn from(value: Name) -> Self {
+impl From<Symbol> for AlgExpr {
+    fn from(value: Symbol) -> Self {
         Value::Var(value).into()
     }
 }
@@ -86,7 +87,7 @@ impl From<FnCall> for AlgExpr {
 #[derive(Clone, Debug, PartialEq)]
 pub enum Value {
     Num(f64),
-    Var(Name),
+    Var(Symbol),
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -141,7 +142,7 @@ impl From<UnaryOp> for AlgUnaryOp {
 #[derive(Clone, Debug, PartialEq)]
 pub struct FnCall {
     pub(crate) args: Vec<AlgExpr>,
-    pub(crate) func: Name,
+    pub(crate) func: Symbol,
 }
 
 pub struct ExprToAlgebra;
@@ -162,7 +163,7 @@ impl ExprVisit for ExprToAlgebra {
     fn visit_value(&mut self, node: &ExprValue) -> Self::Result {
         match node {
             ExprValue::Literal(l) => Value::Num(l.num).into(),
-            ExprValue::Ident(id) => Value::Var(id.name.clone()).into()
+            ExprValue::Ident(id) => Value::Var(id.symbol).into()
         }
     }
 
@@ -197,7 +198,7 @@ impl ExprVisit for ExprToAlgebra {
 
         FnCall {
             args,
-            func: node.fn_name.name.clone()
+            func: node.fn_name.symbol
         }.into()
     }
 }
@@ -266,12 +267,14 @@ pub trait AlgebraFold {
     }
 }
 
+#[derive(Debug)]
 pub enum EvalErrorKind {
-    UndefinedVar(Name),
-    UndefinedFunc(Name),
+    UndefinedVar(Symbol),
+    UndefinedFunc(Symbol),
     BadFnCall(CallError)
 }
 
+#[derive(Debug)]
 pub struct EvalError {
     pub kind: EvalErrorKind,
     // pub(crate) source: Rc<str>,
@@ -306,13 +309,13 @@ impl<'a> Evaluator<'a> {
         self.errors.push(err);
     }
 
-    fn eval_variable(&mut self, name: &Name) -> Option<f64> {
+    fn eval_variable(&mut self, name: Symbol) -> Option<f64> {
         let var = self.context.get_variable(name);
         if let Some(expr) = var {
             let mut eval = Evaluator::new(self.context);
             eval.visit_expr(expr)
         } else {
-            self.store_error(EvalErrorKind::UndefinedVar(name.clone()));
+            self.store_error(EvalErrorKind::UndefinedVar(name));
             None
         }
     }
@@ -328,7 +331,7 @@ impl<'a> AlgebraVisit for Evaluator<'a> {
     fn visit_value(&mut self, node: &Value) -> Self::Result {
         match node {
             Value::Num(n) => Some(*n),
-            Value::Var(v) => self.eval_variable(v),
+            Value::Var(v) => self.eval_variable(*v),
         }
     }
 
@@ -360,7 +363,7 @@ impl<'a> AlgebraVisit for Evaluator<'a> {
             .map(|node| self.visit_expr(node))
             .collect::<Option<_>>()?;
 
-        self.context.call_func(&node.func, &args)
+        self.context.call_func(node.func, &args)
             .map_err(|e| self.store_error(EvalErrorKind::BadFnCall(e)))
             .ok()
     }

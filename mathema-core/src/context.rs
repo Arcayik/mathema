@@ -9,54 +9,54 @@ use crate::{
         lexer::{tokenize, LexError},
         parser::{ParseBuffer, ParseError},
     },
-    Name
+    symbol::Symbol
 };
 
 #[derive(Default)]
 pub struct Context {
-    variables: HashMap<String, AlgExpr>,
-    functions: HashMap<String, Function>,
+    variables: HashMap<Symbol, AlgExpr>,
+    functions: HashMap<Symbol, Function>,
 }
 
 impl Context {
-    pub fn set_variable(&mut self, name: String, value: AlgExpr) {
+    pub fn set_variable(&mut self, name: Symbol, value: AlgExpr) {
         self.variables.insert(name, value);
     }
 
-    pub fn get_variable(&self, name: &str) -> Option<&AlgExpr> {
-        self.variables.get(name)
+    pub fn get_variable(&self, name: Symbol) -> Option<&AlgExpr> {
+        self.variables.get(&name)
     }
 
-    pub fn has_variable(&self, name: &str) -> bool {
-        self.get_builtin_variable(name).is_some() || self.variables.contains_key(name)
+    pub fn has_variable(&self, name: Symbol) -> bool {
+        self.get_builtin_variable(name).is_some() || self.variables.contains_key(&name)
     }
 
-    pub fn set_function(&mut self, name: String, body: Function) {
+    pub fn set_function(&mut self, name: Symbol, body: Function) {
         self.functions.insert(name, body);
     }
 
-    fn get_builtin_variable(&self, name: &str) -> Option<&f64> {
-        intrinsics::CONSTANTS.get(name)
+    fn get_builtin_variable(&self, name: Symbol) -> Option<&f64> {
+        intrinsics::CONSTANTS.get(name.as_str())
     }
 
-    fn get_builtin_function(&self, name: &str) -> Option<&fn(&[f64]) -> f64> {
-        intrinsics::CONST_FNS.get(name)
+    fn get_builtin_function(&self, name: Symbol) -> Option<&fn(&[f64]) -> f64> {
+        intrinsics::CONST_FNS.get(name.as_str())
     }
 
-    pub fn call_func(&self, name: &str, args: &[f64]) -> Result<f64, CallError> {
+    pub fn call_func(&self, name: Symbol, args: &[f64]) -> Result<f64, CallError> {
         if let Some(func) = self.get_builtin_function(name) {
             return Ok((func)(args))
         }
 
-        if let Some(func) = self.functions.get(name) {
+        if let Some(func) = self.functions.get(&name) {
             func.evaluate(self, args)
         } else {
             Err(CallError::NotFound)
         }
     }
 
-    pub fn has_func(&self, name: &str) -> bool {
-        self.functions.contains_key(name)
+    pub fn has_func(&self, name: Symbol) -> bool {
+        self.functions.contains_key(&name)
     }
 }
 
@@ -74,8 +74,8 @@ pub enum MathemaError {
 
 pub enum Outcome {
     Answer(f64),
-    Var(Name),
-    Fn(Name)
+    Var(Symbol),
+    Fn(Symbol)
 }
 
 pub fn mathema_parse(context: &mut Context, input: &str) -> Result<Outcome, MathemaError> {
@@ -102,13 +102,13 @@ fn process_algebra_stmt(context: &mut Context, alg_stmt: AlgStmt) -> Result<Outc
                 Err(MathemaError::Eval(eval.take_errors()))
             }
         },
-        AlgStmt::VarDecl(name, expr) => {
-            context.set_variable(name.to_string(), expr);
-            Ok(Outcome::Var(name))
+        AlgStmt::VarDecl(symbol, expr) => {
+            context.set_variable(symbol, expr);
+            Ok(Outcome::Var(symbol))
         },
-        AlgStmt::FnDecl(name, func) => {
-            context.set_function(name.to_string(), func);
-            Ok(Outcome::Fn(name))
+        AlgStmt::FnDecl(symbol, func) => {
+            context.set_function(symbol, func);
+            Ok(Outcome::Fn(symbol))
         }
     } 
 }

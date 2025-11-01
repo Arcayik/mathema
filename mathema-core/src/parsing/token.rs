@@ -1,8 +1,9 @@
 use crate::{
-    name::Name, parsing::{
+    parsing::{
         lexer::LexToken,
         parser::{ParseError, ParseStream},
-    }
+    },
+    symbol::Symbol
 };
 
 #[derive(Debug, Clone, Copy)]
@@ -47,7 +48,7 @@ macro_rules! define_punctuation {
             impl Parse for $name {
                 fn parse(input: ParseStream) -> Result<Self, ParseError> {
                     if let $crate::parsing::lexer::LexToken::Punct(punct) = input.next_token() {
-                        if punct.name.to_string() == $token {
+                        if punct.symbol.to_string() == $token {
                             Ok(Self { span: punct.span })
                         } else {
                             Err(input.error(&format!("Expected {}", stringify!($name))))
@@ -61,7 +62,7 @@ macro_rules! define_punctuation {
             impl Token for $name {
                 fn peek(input: ParseStream) -> bool {
                     if let $crate::parsing::lexer::LexToken::Punct(punct) = input.peek_token() {
-                        punct.name.to_string() == $token
+                        punct.symbol.to_string() == $token
                     } else {
                         false
                     }
@@ -166,7 +167,7 @@ impl_spanned! { Literal }
 
 #[derive(Debug, Clone)]
 pub struct Ident {
-    pub name: Name,
+    pub symbol: Symbol,
     pub span: Span,
 }
 
@@ -192,7 +193,7 @@ impl_spanned! { Ident }
 
 #[derive(Debug, Clone)]
 pub struct Punct {
-    pub name: Name,
+    pub symbol: Symbol,
     pub span: Span,
 }
 

@@ -6,6 +6,12 @@ struct SymbolId(u32);
 #[derive(Copy, Clone, Debug, Eq, PartialEq, Hash)]
 pub struct Symbol(SymbolId);
 
+impl std::fmt::Display for Symbol {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.as_str())
+    }
+}
+
 impl Symbol {
     pub fn intern(s: &str) -> Self {
         let mut table = SYMBOL_TABLE.lock().unwrap();
@@ -24,7 +30,7 @@ impl Symbol {
 
     pub fn as_str(&self) -> &'static str {
         let table = SYMBOL_TABLE.lock().unwrap();
-        &table.strings[self.0.0 as usize]
+        table.strings[self.0.0 as usize]
     }
 }
 
@@ -34,7 +40,7 @@ struct StringTable {
     strings: Vec<&'static str>
 }
 
-pub static SYMBOL_TABLE: LazyLock<Mutex<StringTable>> = LazyLock::new(||
+static SYMBOL_TABLE: LazyLock<Mutex<StringTable>> = LazyLock::new(||
     Mutex::new(StringTable {
         map: HashMap::new(),
         strings: Vec::new()

@@ -83,7 +83,7 @@ impl std::fmt::Debug for ExprValue {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Self::Literal(l) => write!(f, "{}", l.num),
-            Self::Ident(i) => write!(f, "{}", i.name)
+            Self::Ident(i) => write!(f, "{}", i.symbol)
         }
     }
 }

@@ -1,12 +1,10 @@
 use std::io::Write;
 
 use mathema_core::{
-    context::{mathema_parse, Context, MathemaError, Outcome},
+    context::{mathema_parse, Context, Outcome},
+    error::Diagnostic,
     symbol::Symbol
 };
-
-mod diagnostic;
-use diagnostic::Diagnostic;
 
 pub struct Prompt {
     prefix: String,
@@ -29,9 +27,11 @@ impl Prompt {
         input.trim().to_string()
     }
 
-    pub fn show_diagnostic(&self, diagnostic: &Diagnostic) {
-        diagnostic.highlight_span(self.prefix.len());
-        println!("{}", diagnostic);
+    pub fn show_error(&self, error: &dyn Diagnostic) {
+        if let Some(src) = error.source_code() {
+            println!("{}", src);
+        }
+        println!("{}", error.message());
     }
 
     pub fn show_answer(&self, answer: f64) {
@@ -59,7 +59,7 @@ fn main() {
         let result = mathema_parse(&mut context, &input);
         match result {
             Ok(outcome) => handle_outcome(&prompt, outcome),
-            Err(errs) => handle_error(&prompt, errs)
+            Err(errs) => errs.iter().for_each(|e| prompt.show_error(e.as_ref()))
         }
     }
 }
@@ -70,8 +70,4 @@ fn handle_outcome(state: &Prompt, outcome: Outcome) {
         Outcome::Var(ref n) => state.show_var_decl(*n),
         Outcome::Fn(ref n) => state.show_fn_decl(*n),
     }
-}
-
-fn handle_error(state: &Prompt, error: MathemaError) {
-    todo!()
 }

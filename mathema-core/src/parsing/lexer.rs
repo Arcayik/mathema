@@ -1,4 +1,6 @@
-use std::ops::Deref;
+use std::{error::Error, fmt::Display, ops::Deref, rc::Rc};
+
+use crate::error::Diagnostic;
 
 use super::token::*;
 
@@ -26,32 +28,50 @@ impl std::fmt::Display for LexToken {
 }
 
 #[derive(Clone, Debug)]
-pub enum LexError {
-    UnknownChar(char, Span),
-    NumParseError(Span),
-    UnclosedDelim(Span),
-    TrailingDelim(Span)
+pub struct LexError {
+    src: Rc<str>,
+    span: Span,
+    kind: LexErrorKind
 }
+
+#[derive(Clone, Debug)]
+pub enum LexErrorKind {
+    UnknownChar(char),
+    NumParseError,
+    UnclosedDelim,
+    TrailingDelim
+}
+
+impl Error for LexError {}
 
 impl std::fmt::Display for LexError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Self::UnknownChar(ch, _) => write!(f, "Unknown character: {}", ch),
-            Self::NumParseError(_) => write!(f, "Number parse error"),
-            Self::UnclosedDelim(_) => write!(f, "Unclosed delimiter"),
-            Self::TrailingDelim(_) => write!(f, "Trailing delimiter"),
+        match self.kind {
+            LexErrorKind::UnknownChar(ch) => write!(f, "Unknown character: {}", ch),
+            LexErrorKind::NumParseError => write!(f, "Number parse error"),
+            LexErrorKind::UnclosedDelim => write!(f, "Unclosed delimiter"),
+            LexErrorKind::TrailingDelim => write!(f, "Trailing delimiter"),
         }
+    }
+}
+
+impl Diagnostic for LexError {
+    fn message(&self) -> String {
+        self.to_string()
+    }
+
+    fn source_code<'a>(&'a self) -> Option<Box<dyn Display + 'a>> {
+        Some(Box::new(self.src.as_ref()))
+    }
+
+    fn spans(&self) -> Option<Box<dyn Iterator<Item = Span>>> {
+        Some(Box::new(std::iter::once(self.span)))
     }
 }
 
 impl Spanned for LexError {
     fn span(&self) -> Span {
-        match self {
-            Self::UnknownChar(_, span) => *span,
-            Self::NumParseError(span) => *span,
-            Self::UnclosedDelim(span) => *span,
-            Self::TrailingDelim(span) => *span
-        }
+        self.span
     }
 }
 
@@ -69,9 +89,11 @@ impl TokenBuffer {
     pub fn from_vec(vec: Vec<LexToken>) -> Self {
         TokenBuffer(vec.into_boxed_slice())
     }
+}
 
-    pub fn from_iter<T: Iterator<Item = LexToken>>(iter: T) -> Self {
-        let inner = iter.collect();
+impl FromIterator<LexToken> for TokenBuffer {
+    fn from_iter<T: IntoIterator<Item = LexToken>>(iter: T) -> Self {
+        let inner = iter.into_iter().collect();
         TokenBuffer(inner)
     }
 }
@@ -86,7 +108,7 @@ impl Deref for TokenBuffer {
 
 pub struct Lexer<'s> {
     /// Trimmed input
-    source: &'s str,
+    source: Rc<str>,
     /// Iterator over input chars
     input: std::str::Chars::<'s>,
     /// Peeked character and its byte offset
@@ -95,12 +117,29 @@ pub struct Lexer<'s> {
     offset: usize,
 }
 
+impl Iterator for Lexer<'_> {
+    type Item = char;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        if let Some((ch, byte_offset)) = self.peeked.take() {
+            self.update_position(ch, byte_offset);
+            Some(ch)
+        } else {
+            let ch = self.input.next()?;
+            let byte_offset = self.offset;
+            self.update_position(ch, byte_offset);
+            Some(ch)
+        }
+    }
+}
+
 impl<'s> Lexer<'s> {
-    pub fn new (source: &'s str) -> Self {
-        let source = source.trim();
+    pub fn new(source: &'s str) -> Self {
+        let input = source.chars();
+        let source = Rc::from(source);
         Lexer {
             source,
-            input: source.chars(),
+            input,
             peeked: None,
             offset: 0,
         }
@@ -113,18 +152,6 @@ impl<'s> Lexer<'s> {
             self.peeked = Some((next_char, byte_offset));
         }
         self.peeked.map(|(ch, _)| ch)
-    }
-
-    pub fn next(&mut self) -> Option<char> {
-        if let Some((ch, byte_offset)) = self.peeked.take() {
-            self.update_position(ch, byte_offset);
-            Some(ch)
-        } else {
-            let ch = self.input.next()?;
-            let byte_offset = self.offset;
-            self.update_position(ch, byte_offset);
-            Some(ch)
-        }
     }
 
     fn update_position(&mut self, ch: char, byte_offset: usize) {
@@ -154,7 +181,7 @@ impl<'s> Lexer<'s> {
         }
     }
 
-    pub fn eat_while<F: Fn(char) -> bool>(&mut self, f: F) -> &'s str {
+    pub fn eat_while<F: Fn(char) -> bool>(&mut self, f: F) -> &str {
         let start = self.offset;
         while let Some(&ch) = self.peek().as_ref() {
             if f(ch) {
@@ -313,24 +340,44 @@ impl<'s> Tokenizer<'s> {
 
     fn unknown_char(&mut self) {
         let span = self.lexer.span_char();
-        let error = LexError::UnknownChar(self.lexer.next().expect("no char"), span);
+        let kind = LexErrorKind::UnknownChar(self.lexer.next().expect("no char"));
+        let error = LexError {
+            src: self.lexer.source.clone(),
+            span,
+            kind,
+        };
         self.errors.push(error);
     }
 
     fn num_parse_error(&mut self, span: Span) {
-        let error = LexError::NumParseError(span);
+        let kind = LexErrorKind::NumParseError;
+        let error = LexError {
+            src: self.lexer.source.clone(),
+            span,
+            kind
+        };
         self.errors.push(error);
     }
 
     fn unclosed_delim(&mut self, group: Group) {
         let span = group.span();
-        let error = LexError::UnclosedDelim(span);
+        let kind = LexErrorKind::UnclosedDelim;
+        let error = LexError {
+            src: self.lexer.source.clone(),
+            span,
+            kind
+        };
         self.errors.push(error);
     }
 
     fn trailing_delim(&mut self) {
         let span = self.lexer.span_char();
-        let error = LexError::TrailingDelim(span);
+        let kind = LexErrorKind::TrailingDelim;
+        let error = LexError {
+            src: self.lexer.source.clone(),
+            span,
+            kind
+        };
         self.errors.push(error);
     }
 }
@@ -362,15 +409,15 @@ mod lexing {
 
     pub fn ident(tokenizer: &mut Tokenizer) -> LexToken {
         let start = tokenizer.lexer.mark();
-        let ident_str = tokenizer.lexer.eat_while(|ch| ch.is_alphanumeric() || ch == '_');
         let span = tokenizer.lexer.span_from(start);
+        let ident_str = tokenizer.lexer.eat_while(|ch| ch.is_alphanumeric() || ch == '_');
         LexToken::Ident(Ident { symbol: Symbol::intern(ident_str), span })
     }
 
     pub fn literal(tokenizer: &mut Tokenizer) -> Option<LexToken> {
         let start = tokenizer.lexer.mark();
-        let number_str = tokenizer.lexer.eat_while(|ch| ch.is_ascii_digit() || ch == '.');
         let span = tokenizer.lexer.span_from(start);
+        let number_str = tokenizer.lexer.eat_while(|ch| ch.is_ascii_digit() || ch == '.');
         if let Ok(num) = number_str.parse::<f64>() {
             Some(LexToken::Literal(Literal { num, span }))
         } else {

@@ -1,8 +1,5 @@
 use crate::{
-    context::{CallError, Context},
-    function::{FnArgs, Function},
-    parsing::ast::{BinOp, Expr, ExprBinary, ExprFnCall, ExprGroup, ExprUnary, ExprValue, ExprVisit, Stmt, UnaryOp},
-    symbol::Symbol
+    context::{CallError, Context}, error::Diagnostic, function::{FnArgs, Function}, parsing::ast::{BinOp, Expr, ExprBinary, ExprFnCall, ExprGroup, ExprUnary, ExprValue, ExprVisit, Stmt, UnaryOp}, symbol::Symbol
 };
 
 pub enum AlgStmt {
@@ -284,6 +281,33 @@ pub struct EvalError {
 impl EvalError {
     pub fn new(kind: EvalErrorKind) -> Self {
         EvalError { kind }
+    }
+}
+
+impl std::fmt::Display for EvalError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let str = match &self.kind {
+            EvalErrorKind::UndefinedVar(s) => format!("undefined var: {s}"),
+            EvalErrorKind::UndefinedFunc(s) => format!("undefined func: {s}"),
+            EvalErrorKind::BadFnCall(e) => e.to_string()
+        };
+        write!(f, "{}", str)
+    }
+}
+
+impl std::error::Error for EvalError {}
+
+impl Diagnostic for EvalError {
+    fn message(&self) -> String {
+        todo!()
+    }
+
+    fn source_code<'a>(&'a self) -> Option<Box<dyn std::fmt::Display + 'a>> {
+        todo!()
+    }
+
+    fn spans(&self) -> Option<Box<dyn Iterator<Item = crate::parsing::token::Span>>> {
+        todo!()
     }
 }
 

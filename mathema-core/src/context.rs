@@ -1,15 +1,11 @@
 use std::collections::HashMap;
 
 use crate::{
-    algebra::{AlgExpr, AlgStmt, AlgebraVisit, EvalError, Evaluator},
-    function::Function,
-    intrinsics,
-    parsing::{
+    algebra::{AlgExpr, AlgStmt, AlgebraVisit, EvalError, Evaluator}, error::Diagnostic, function::Function, intrinsics, parsing::{
         ast::Stmt,
-        lexer::{tokenize, LexError},
-        parser::{ParseBuffer, ParseError},
-    },
-    symbol::Symbol
+        lexer::tokenize,
+        parser::ParseBuffer,
+    }, symbol::Symbol
 };
 
 #[derive(Default)]
@@ -60,16 +56,21 @@ impl Context {
     }
 }
 
+#[derive(Debug)]
 pub enum CallError {
     BadArgs(isize),
     Eval(Vec<EvalError>),
     NotFound,
 }
 
-pub enum MathemaError {
-    Lexing(Vec<LexError>),
-    Parsing(Vec<ParseError>),
-    Eval(Vec<EvalError>)
+impl std::fmt::Display for CallError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::BadArgs(_off) => write!(f, "wrong number of arguments"),
+            Self::NotFound => write!(f, "Function not found"),
+            Self::Eval(_e) => write!(f, "Eval errors: TODO")
+        }
+    }
 }
 
 pub enum Outcome {
@@ -78,28 +79,36 @@ pub enum Outcome {
     Fn(Symbol)
 }
 
-pub fn mathema_parse(context: &mut Context, input: &str) -> Result<Outcome, MathemaError> {
+pub fn mathema_parse(context: &mut Context, input: &str) -> Result<Outcome, Vec<Box<dyn Diagnostic>>> {
     let (buffer, errors) = tokenize(input);
     if !errors.is_empty() {
-        return Err(MathemaError::Lexing(errors));
+        let err: Vec<Box<dyn Diagnostic>> = errors
+            .into_iter()
+            .map(|e| Box::new(e) as Box<dyn Diagnostic>)
+            .collect();
+        return Err(err);
     }
 
     let parsebuffer = ParseBuffer::new(buffer);
     let stmt = parsebuffer.parse::<Stmt>()
-        .map_err(|e| MathemaError::Parsing(vec![e]))?;
+        .map_err(|e| vec![Box::new(e) as Box<dyn Diagnostic>])?;
 
     let alg_stmt = AlgStmt::from_expr_stmt(&stmt);
     process_algebra_stmt(context, alg_stmt)
 }
 
-fn process_algebra_stmt(context: &mut Context, alg_stmt: AlgStmt) -> Result<Outcome, MathemaError> {
+fn process_algebra_stmt(context: &mut Context, alg_stmt: AlgStmt) -> Result<Outcome, Vec<Box<dyn Diagnostic>>> {
     match alg_stmt {
         AlgStmt::Expr(expr) => {
             let mut eval = Evaluator::new(context);
             if let Some(ans) = eval.visit_expr(&expr) {
                 Ok(Outcome::Answer(ans))
             } else {
-                Err(MathemaError::Eval(eval.take_errors()))
+                let errs = eval.take_errors()
+                    .into_iter()
+                    .map(|e| Box::new(e) as Box<dyn Diagnostic>)
+                    .collect();
+                Err(errs)
             }
         },
         AlgStmt::VarDecl(symbol, expr) => {

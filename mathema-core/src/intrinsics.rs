@@ -1,16 +1,18 @@
 use std::{collections::HashMap, sync::LazyLock};
 
+use crate::symbol::Symbol;
+
 type IntrinsicFn = fn(&[f64]) -> f64;
 
-pub static CONSTANTS: LazyLock<HashMap<String, f64>> = LazyLock::new(declare_constants);
-pub static CONST_FNS: LazyLock<HashMap<String, IntrinsicFn>> = LazyLock::new(declare_functions);
+pub static CONSTANTS: LazyLock<HashMap<Symbol, f64>> = LazyLock::new(declare_constants);
+pub static CONST_FNS: LazyLock<HashMap<Symbol, IntrinsicFn>> = LazyLock::new(declare_functions);
 
 macro_rules! define_constants {
     ( $( $name:ident = $def:expr ;)* ) => {
-        pub(crate) fn declare_constants() -> HashMap<String, f64> {
+        fn declare_constants() -> HashMap<Symbol, f64> {
             let mut hashmap = HashMap::new();
             $(
-                let _ = hashmap.insert(stringify!($name).into(), $def)
+                let _ = hashmap.insert(Symbol::intern(stringify!($name)), $def)
             );*;
             hashmap
         }
@@ -21,11 +23,11 @@ macro_rules! define_functions {
     (
         $( $name:ident ( $($args:ident),* ) = $body:expr ; )*
     ) => {
-        pub(crate) fn declare_functions() -> HashMap<String, IntrinsicFn> {
+        fn declare_functions() -> HashMap<Symbol, IntrinsicFn> {
             let mut hashmap = HashMap::new();
             $(
                 let func: IntrinsicFn = $body;
-                hashmap.insert(stringify!($name).into(), func)
+                hashmap.insert(Symbol::intern(stringify!($name)), func)
             );*;
             hashmap
         }

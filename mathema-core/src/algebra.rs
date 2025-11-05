@@ -1,11 +1,45 @@
+use std::rc::Rc;
+
 use crate::{
-    context::{CallError, Context}, error::Diagnostic, function::{FnArgs, Function}, parsing::ast::{BinOp, Expr, ExprBinary, ExprFnCall, ExprGroup, ExprUnary, ExprValue, ExprVisit, Stmt, UnaryOp}, symbol::Symbol
+    context::{CallError, Context},
+    error::Diagnostic,
+    function::{eval_function, FnArgs, Function},
+    intrinsics,
+    parsing::{
+        ast::{BinOp, Expr, ExprBinary, ExprFnCall, ExprGroup, ExprUnary, ExprValue, ExprVisit, Stmt, UnaryOp},
+        token::Span
+    },
+    symbol::Symbol
 };
 
 pub enum AlgStmt {
     Expr(AlgExpr),
     VarDecl(Symbol, AlgExpr),
     FnDecl(Symbol, Function),
+}
+
+impl std::fmt::Display for AlgStmt {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            AlgStmt::Expr(alg) => {
+                let (body, _) = algebra_to_string(alg, &[]);
+                write!(f, "{}", body)
+            },
+            AlgStmt::VarDecl(var, alg) => {
+                let (body, _) = algebra_to_string(alg, &[]);
+                write!(f, "{} = {}", var.as_str(), body)
+            },
+            AlgStmt::FnDecl(name, func) => {
+                let (body, _) = algebra_to_string(&func.body, &[]);
+                let args = func.args.get_args()
+                    .iter()
+                    .map(|a| a.as_str())
+                    .collect::<Vec<_>>()
+                    .join(", ");
+                write!(f, "{}({}) = {}", name, args, body)
+            }
+        }
+    }
 }
 
 impl AlgStmt {
@@ -97,6 +131,18 @@ pub struct Binary {
 #[derive(Clone, Debug, PartialEq)]
 pub enum AlgBinOp { Add, Sub, Mul, Div, Exp }
 
+impl std::fmt::Display for AlgBinOp {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Add => write!(f, "+"),
+            Self::Sub => write!(f, "-"),
+            Self::Mul => write!(f, "*"),
+            Self::Div => write!(f, "/"),
+            Self::Exp => write!(f, "^"),
+        }
+    }
+}
+
 impl AlgBinOp {
     pub fn is_additive(&self) -> bool {
         matches!(self, AlgBinOp::Add | AlgBinOp::Sub)
@@ -128,6 +174,14 @@ pub struct Unary {
 #[derive(Clone, Debug, PartialEq)]
 pub enum AlgUnaryOp { Neg }
 
+impl std::fmt::Display for AlgUnaryOp {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Neg => write!(f, "-")
+        }
+    }
+}
+
 impl From<UnaryOp> for AlgUnaryOp {
     fn from(value: UnaryOp) -> Self {
         match value {
@@ -138,8 +192,8 @@ impl From<UnaryOp> for AlgUnaryOp {
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct FnCall {
-    pub(crate) args: Vec<AlgExpr>,
     pub(crate) func: Symbol,
+    pub(crate) args: Vec<AlgExpr>,
 }
 
 pub struct ExprToAlgebra;
@@ -274,14 +328,8 @@ pub enum EvalErrorKind {
 #[derive(Debug)]
 pub struct EvalError {
     pub kind: EvalErrorKind,
-    // pub(crate) source: Rc<str>,
-    // pub(crate) span: Span
-}
-
-impl EvalError {
-    pub fn new(kind: EvalErrorKind) -> Self {
-        EvalError { kind }
-    }
+    pub(crate) source: Rc<str>,
+    pub(crate) span: Span
 }
 
 impl std::fmt::Display for EvalError {
@@ -299,96 +347,186 @@ impl std::error::Error for EvalError {}
 
 impl Diagnostic for EvalError {
     fn message(&self) -> String {
-        todo!()
+        self.to_string()
     }
 
     fn source_code<'a>(&'a self) -> Option<Box<dyn std::fmt::Display + 'a>> {
-        todo!()
+        Some(Box::new(self.source.clone()))
     }
 
-    fn spans(&self) -> Option<Box<dyn Iterator<Item = crate::parsing::token::Span>>> {
-        todo!()
-    }
-}
-
-pub struct Evaluator<'a> {
-    context: &'a Context,
-    errors: Vec<EvalError>
-}
-
-impl<'a> Evaluator<'a> {
-    pub fn new(context: &'a Context) -> Self {
-        Evaluator {
-            context,
-            errors: Vec::new()
-        }
-    }
-
-    pub fn take_errors(&mut self) -> Vec<EvalError> {
-        std::mem::take(&mut self.errors)
-    }
-
-    fn store_error(&mut self, kind: EvalErrorKind) {
-        let err = EvalError::new(kind);
-        self.errors.push(err);
-    }
-
-    fn eval_variable(&mut self, name: Symbol) -> Option<f64> {
-        let var = self.context.get_variable(name);
-        if let Some(expr) = var {
-            let mut eval = Evaluator::new(self.context);
-            eval.visit_expr(expr)
-        } else {
-            self.store_error(EvalErrorKind::UndefinedVar(name));
-            None
-        }
+    fn spans(&self) -> Option<Box<dyn Iterator<Item = Span>>> {
+        Some(Box::new(std::iter::once(self.span)))
     }
 }
 
-impl<'a> AlgebraVisit for Evaluator<'a> {
-    type Result = Option<f64>;
+pub fn eval_algebra(context: &Context, algebra: &AlgExpr) -> Result<f64, Vec<EvalError>> {
+    fn recurse(
+        context: &Context,
+        root: &AlgExpr,
+        algebra: &AlgExpr,
+        errors: &mut Vec<EvalError>
+    ) -> Option<f64> {
+        match algebra {
+            AlgExpr::Value(val) => match val {
+                Value::Num(num) => Some(*num),
+                Value::Var(var) => {
+                    if let Some(alg) = context.get_variable(*var) {
+                        recurse(context, root, alg, errors)
+                    } else if let Some(c) = intrinsics::CONSTANTS.get(var) {
+                        Some(*c)
+                    } else {
+                        let (source, span) = algebra_to_string(root, &[algebra]);
+                        let error = EvalError {
+                            kind: EvalErrorKind::UndefinedVar(*var),
+                            source: source.into(),
+                            span: span[0]
+                        };
+                        errors.push(error);
+                        None
+                    }
+                }
+            },
+            AlgExpr::Unary(un) => {
+                if let Some(val) = recurse(context, root, algebra, errors) {
+                    match un.op {
+                        AlgUnaryOp::Neg => Some(- val)
+                    }
+                } else {
+                    None
+                }
+            },
+            AlgExpr::Binary(bin) => {
+                let left = recurse(context, root, &bin.left, errors);
+                let right = recurse(context, root, &bin.right, errors);
 
-    fn visit_expr(&mut self, node: &AlgExpr) -> Self::Result {
-        visit::walk_expr(self, node)
-    }
+                if let (Some(l), Some(r)) = (left, right) {
+                    match bin.op {
+                        AlgBinOp::Add => Some(l + r),
+                        AlgBinOp::Sub => Some(l - r),
+                        AlgBinOp::Mul => Some(l * r),
+                        AlgBinOp::Div => Some(l / r),
+                        AlgBinOp::Exp => Some(l.powf(r)),
+                    }
+                } else {
+                    None
+                }
+            },
+            AlgExpr::FnCall(fc) => {
+                let args: Vec<f64> = fc.args
+                    .iter()
+                    .map(|a| recurse(context, root, a, errors))
+                    .collect::<Option<_>>()?;
 
-    fn visit_value(&mut self, node: &Value) -> Self::Result {
-        match node {
-            Value::Num(n) => Some(*n),
-            Value::Var(v) => self.eval_variable(*v),
+                if let Some(func) = intrinsics::CONST_FNS.get(&fc.func) {
+                    return Some((func)(&args))
+                };
+
+                if let Some(func) = context.get_function(fc.func) {
+                    match eval_function(context, func, &args) {
+                        Ok(ans) => Some(ans),
+                        Err(e) => {
+                            let (source, span) = algebra_to_string(root, &[algebra]);
+                            let error = EvalError {
+                                kind: EvalErrorKind::BadFnCall(e),
+                                source: source.into(),
+                                span: span[0]
+                            };
+                            errors.push(error);
+                            None
+                        }
+                    }
+                } else {
+                    let (source, span) = algebra_to_string(root, &[algebra]);
+                    let error = EvalError {
+                        kind: EvalErrorKind::UndefinedFunc(fc.func),
+                        source: source.into(),
+                        span: span[0]
+                    };
+                    errors.push(error);
+                    None
+                }
+            }
         }
     }
 
-    fn visit_unary(&mut self, node: &Unary) -> Self::Result {
-        let value = self.visit_expr(&node.expr)?;
-
-        match node.op {
-            AlgUnaryOp::Neg => Some(- value)
-        }
+    let mut errors = Vec::new();
+    let result = recurse(context, algebra, algebra, &mut errors);
+    if let Some(ans) = result {
+        Ok(ans)
+    } else {
+        Err(errors)
     }
+}
 
-    fn visit_binary(&mut self, node: &Binary) -> Self::Result {
-        let left = self.visit_expr(&node.left)?;
-        let right = self.visit_expr(&node.right)?;
+pub fn algebra_to_string(algebra: &AlgExpr, take_span: &[&AlgExpr]) -> (String, Vec<Span>) {
+    // TODO: parenthesis when precedence mismatches!
+    /*
+     *    +
+     *   1 *  => 1+2*3
+     *    2 3
+     *
+     *   *  
+     *  + 3 => 1+2*3 => (1+2)*3
+     * 1 2 
+     *
+     * if subtree has lower precedence!
+     */
 
-        let value = match node.op {
-            AlgBinOp::Add => left + right,
-            AlgBinOp::Sub => left - right,
-            AlgBinOp::Mul => left * right,
-            AlgBinOp::Div => left / right,
-            AlgBinOp::Exp => left.powf(right),
+    fn recurse(
+        algebra: &AlgExpr,
+        take_span: &[&AlgExpr],
+        string: &mut String,
+        spans: &mut Vec<Span>
+    ) {
+        let old_end = string.len();
+        match algebra {
+            AlgExpr::Value(val) => match val {
+                Value::Num(num) => string.push_str(&num.to_string()),
+                Value::Var(var) => string.push_str(var.as_str()),
+            },
+            AlgExpr::Unary(un) => {
+                string.push_str(&un.op.to_string());
+                let mut sub_str = String::new();
+                recurse(&un.expr, take_span, &mut sub_str, spans);
+                if !matches!(*un.expr, AlgExpr::Value(_)) {
+                    string.push_str(&format!("({})", sub_str));
+                } else {
+                    string.push_str(&sub_str)
+                }
+            },
+            AlgExpr::Binary(bin) => {
+                recurse(&bin.left, take_span, string, spans);
+                string.push_str(&format!(" {} ", bin.op));
+                recurse(&bin.right, take_span, string, spans);
+            },
+            AlgExpr::FnCall(fc) => {
+                string.push_str(fc.func.as_str());
+                string.push('(');
+
+                let mut arg_strings: Vec<String> = Vec::new();
+                for arg in &fc.args {
+                    let mut arg_str = String::new();
+                    recurse(arg, take_span, &mut arg_str, spans);
+                    arg_strings.push(arg_str);
+                }
+                string.push_str(&arg_strings.join(", "));
+                string.push(')');
+            }
         };
 
-        Some(value)
+        if take_span.iter().any(|t| core::ptr::eq(algebra, *t)) {
+            let span = Span {
+                start: old_end,
+                end: string.len(),
+            };
+            spans.push(span);
+        }
     }
 
-    fn visit_fn_call(&mut self, node: &FnCall) -> Self::Result {
-        let args: Vec<f64> = node.args.iter()
-            .map(|node| self.visit_expr(node))
-            .collect::<Option<_>>()?;
+    let mut string = String::new();
+    let mut spans = Vec::new();
 
-        self.context.call_func(node.func, &args)
-            .map_err(|e| self.store_error(EvalErrorKind::BadFnCall(e)))
-            .ok()
-    }
+    recurse(algebra, take_span, &mut string, &mut spans);
+
+    (string, spans)
 }

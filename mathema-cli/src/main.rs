@@ -3,7 +3,6 @@ use std::io::Write;
 use mathema_core::{
     context::{mathema_parse, Context, Outcome},
     error::Diagnostic,
-    symbol::Symbol
 };
 
 pub struct Prompt {
@@ -37,14 +36,6 @@ impl Prompt {
     pub fn show_answer(&self, answer: f64) {
         println!("{}", answer);
     }
-
-    pub fn show_var_decl(&self, name: Symbol) {
-        println!("declared {name}");
-    }
-
-    pub fn show_fn_decl(&self, name: Symbol) {
-        println!("defined {name}()");
-    }
 }
 
 fn main() {
@@ -65,9 +56,7 @@ fn main() {
 }
 
 fn handle_outcome(state: &Prompt, outcome: Outcome) {
-    match outcome {
-        Outcome::Answer(ans) => state.show_answer(ans),
-        Outcome::Var(ref n) => state.show_var_decl(*n),
-        Outcome::Fn(ref n) => state.show_fn_decl(*n),
+    if let Outcome::Answer(ans) = outcome {
+        state.show_answer(ans)
     }
 }

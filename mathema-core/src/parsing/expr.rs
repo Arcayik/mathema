@@ -99,12 +99,13 @@ impl Spanned for ExprValue {
 
 impl Parse for ExprValue {
     fn parse(input: ParseStream) -> Result<Self, ParseError> {
-        if input.peek::<Literal>() {
+        let mut lookahead = input.lookahead();
+        if lookahead.peek::<Literal>() {
             input.parse().map(ExprValue::Literal)
-        } else if input.peek::<Ident>() {
+        } else if lookahead.peek::<Ident>() {
             input.parse().map(ExprValue::Ident)
         } else {
-            Err(input.error("Expected literal or ident"))
+            Err(lookahead.error())
         }
     }
 }
@@ -185,6 +186,7 @@ impl Parse for BinOp {
         } else if input.peek::<Token![^]>() {
             input.parse().map(BinOp::Exp)
         } else {
+            // use custom message here instead of listing binary operators
             Err(input.error("Expected binary operator"))
         }
     }
@@ -244,6 +246,7 @@ impl Parse for UnaryOp {
         if input.peek::<Token![-]>() {
             input.parse().map(UnaryOp::Neg)
         } else {
+            // use custom message here instead of listing unary operators
             Err(input.error("Expected unary operator"))
         }
     }
@@ -273,6 +276,7 @@ impl Parse for ExprGroup {
                 delim: g.delim,
                 expr: Box::new(input.parse()?)
             };
+            // already checked by lexer
             assert!(matches!(input.next_token(), LexToken::End(..))); // eat End
             Ok(group)
         } else {

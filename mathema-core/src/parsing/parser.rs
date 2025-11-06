@@ -1,9 +1,10 @@
-use std::{cell::Cell, error::Error};
+use std::{cell::Cell, error::Error, fmt::Display};
 
 use crate::error::Diagnostic;
 
 use super::{
-    lexer::{LexToken, TokenBuffer}, token::{Parse, Span, Spanned, Token}
+    lexer::{LexToken, TokenBuffer},
+    token::{Parse, Span, Spanned, Token}
 };
 
 type Result<T> = std::result::Result<T, ParseError>;
@@ -37,6 +38,11 @@ impl Diagnostic for ParseError {
 }
 
 impl ParseError {
+    pub fn new<T: Display>(msg: T, span: Span) -> Self {
+        let msg = msg.to_string();
+        ParseError { msg, span }
+    }
+
     pub fn span(&self) -> Span {
         self.span
     }
@@ -155,6 +161,13 @@ impl ParseBuffer {
         }
     }
 
+    pub fn lookahead(&self) -> Lookahead<'_> {
+        Lookahead {
+            input: self,
+            peeked: Vec::new()
+        }
+    }
+
     pub fn error(&self, msg: &str) -> ParseError {
         let span = self.get_span(self.peek_token());
         ParseError { msg: msg.to_string(), span }
@@ -162,5 +175,46 @@ impl ParseBuffer {
 
     pub fn spanned_error(&self, msg: &str, span: Span) -> ParseError {
         ParseError { msg: msg.to_string(), span }
+    }
+}
+
+pub struct Lookahead<'s> {
+    input: ParseStream<'s>,
+    peeked: Vec<&'static str>
+}
+
+impl Lookahead<'_> {
+    pub fn peek<T: Token>(&mut self) -> bool {
+        if self.input.peek::<T>() {
+            return true;
+        }
+        self.peeked.push(T::display());
+        false
+    }
+
+    pub fn error(&self) -> ParseError {
+        let span = self.input.get_span(self.input.peek_token());
+        match self.peeked.len() {
+            0 => {
+                if self.input.is_eof() {
+                    ParseError::new("unexpected end of input", span)
+                }  else {
+                    ParseError::new("unexpected token", span)
+                }
+            },
+            1 => {
+                let msg = format!("expected {}", self.peeked[0]);
+                ParseError::new(msg, span)
+            },
+            2 => {
+                let msg = format!("expected {} or {}", self.peeked[0], self.peeked[1]);
+                ParseError::new(msg, span)
+            },
+            _ => {
+                let list = self.peeked.join(", ");
+                let msg = format!("expected one of: {}", list);
+                ParseError::new(msg, span)
+            }
+        }
     }
 }

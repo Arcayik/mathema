@@ -6,7 +6,7 @@ use crate::{
     function::{function_to_string, Function},
     intrinsics,
     parsing::{
-        ast::Stmt,
+        ast::AstStmt,
         lexer::tokenize,
         parser::ParseBuffer, token::Span,
     },
@@ -77,7 +77,7 @@ pub fn mathema_parse(context: &mut Context, input: &str) -> Result<Outcome, Vec<
     }
 
     let parsebuffer = ParseBuffer::new(buffer);
-    let stmt = parsebuffer.parse::<Stmt>()
+    let stmt = parsebuffer.parse::<AstStmt>()
         .map_err(|e| vec![Box::new(e) as Box<dyn Diagnostic>])?;
 
     let alg_stmt = AlgStmt::from_expr_stmt(&stmt);

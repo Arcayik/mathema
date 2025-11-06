@@ -2,18 +2,72 @@ use super::{
     lexer::LexToken,
     parser::{ParseError, ParseStream},
     punctuated::Punctuated,
-    stmt::parse_punctuated_group, token::{Delimiter, End, Ident, Literal, Paren, Parse, Span, Spanned, Token}
+    token::{Delimiter, End, Ident, Literal, Paren, Parse, Span, Spanned, Token}
 };
 
-pub enum Expr {
-    Value(ExprValue),
-    Binary(ExprBinary),
-    Unary(ExprUnary),
-    Group(ExprGroup),
-    FnCall(ExprFnCall),
+#[derive(Debug)]
+pub enum AstStmt {
+    Expr(AstExpr),
+    VarDecl(VarDecl),
+    FnDecl(FnDecl)
 }
 
-impl std::fmt::Debug for Expr {
+impl From<AstExpr> for AstStmt {
+    fn from(value: AstExpr) -> Self {
+        AstStmt::Expr(value)
+    }
+}
+
+impl From<VarDecl> for AstStmt {
+    fn from(value: VarDecl) -> Self {
+        AstStmt::VarDecl(value)
+    }
+}
+
+impl From<FnDecl> for AstStmt {
+    fn from(value: FnDecl) -> Self {
+        AstStmt::FnDecl(value)
+    }
+}
+
+impl Spanned for AstStmt {
+    fn span(&self) -> Span {
+        match self {
+            Self::Expr(expr) => expr.span(),
+            Self::VarDecl(vardecl) => vardecl.span(),
+            Self::FnDecl(fndecl) => fndecl.span(),
+        }
+    }
+}
+
+impl Parse for AstStmt {
+    fn parse(input: ParseStream) -> Result<Self, ParseError> {
+        let stmt = if input.peek::<Ident>() && input.peek2::<Token![=]>() {
+            input.parse().map(AstStmt::VarDecl)?
+        } else if input.peek::<Ident>() && input.peek2::<Paren>() {
+            // might be a declaration, might just be a call in an expr
+            parse_ambiguous_fn(input)?
+        } else {
+            input.parse().map(AstStmt::Expr)?
+        };
+
+        if !input.peek::<End>() {
+            return Err(input.error("Trailing token"))
+        }
+
+        Ok(stmt)
+    }
+}
+
+pub enum AstExpr {
+    Value(AstValue),
+    Binary(AstBinary),
+    Unary(AstUnary),
+    Group(AstGroup),
+    FnCall(AstFnCall),
+}
+
+impl std::fmt::Debug for AstExpr {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Self::Value(t) => write!(f, "{:?}", t),
@@ -25,37 +79,37 @@ impl std::fmt::Debug for Expr {
     }
 }
 
-impl From<ExprValue> for Expr {
-    fn from(value: ExprValue) -> Self {
-        Expr::Value(value)
+impl From<AstValue> for AstExpr {
+    fn from(value: AstValue) -> Self {
+        AstExpr::Value(value)
     }
 }
 
-impl From<ExprBinary> for Expr {
-    fn from(value: ExprBinary) -> Self {
-        Expr::Binary(value)
+impl From<AstBinary> for AstExpr {
+    fn from(value: AstBinary) -> Self {
+        AstExpr::Binary(value)
     }
 }
 
-impl From<ExprUnary> for Expr {
-    fn from(value: ExprUnary) -> Self {
-        Expr::Unary(value)
+impl From<AstUnary> for AstExpr {
+    fn from(value: AstUnary) -> Self {
+        AstExpr::Unary(value)
     }
 }
 
-impl From<ExprGroup> for Expr {
-    fn from(value: ExprGroup) -> Self {
-        Expr::Group(value)
+impl From<AstGroup> for AstExpr {
+    fn from(value: AstGroup) -> Self {
+        AstExpr::Group(value)
     }
 }
 
-impl From<ExprFnCall> for Expr {
-    fn from(value: ExprFnCall) -> Self {
-        Expr::FnCall(value)
+impl From<AstFnCall> for AstExpr {
+    fn from(value: AstFnCall) -> Self {
+        AstExpr::FnCall(value)
     }
 }
 
-impl Spanned for Expr {
+impl Spanned for AstExpr {
     fn span(&self) -> Span {
         match self {
             Self::Value(e) => e.span(),
@@ -67,19 +121,19 @@ impl Spanned for Expr {
     }
 }
 
-impl Parse for Expr {
+impl Parse for AstExpr {
     fn parse(input: ParseStream) -> Result<Self, ParseError> {
         let lhs = parsing::parse_expr_lhs(input)?;
         parsing::parse_expr(input, lhs, Precedence::MIN)
     }
 }
 
-pub enum ExprValue {
+pub enum AstValue {
     Literal(Literal),
     Ident(Ident),
 }
 
-impl std::fmt::Debug for ExprValue {
+impl std::fmt::Debug for AstValue {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Self::Literal(l) => write!(f, "{}", l.num),
@@ -88,7 +142,7 @@ impl std::fmt::Debug for ExprValue {
     }
 }
 
-impl Spanned for ExprValue {
+impl Spanned for AstValue {
     fn span(&self) -> Span {
         match self {
             Self::Literal(lit) => lit.span(),
@@ -97,32 +151,32 @@ impl Spanned for ExprValue {
     }
 }
 
-impl Parse for ExprValue {
+impl Parse for AstValue {
     fn parse(input: ParseStream) -> Result<Self, ParseError> {
         let mut lookahead = input.lookahead();
         if lookahead.peek::<Literal>() {
-            input.parse().map(ExprValue::Literal)
+            input.parse().map(AstValue::Literal)
         } else if lookahead.peek::<Ident>() {
-            input.parse().map(ExprValue::Ident)
+            input.parse().map(AstValue::Ident)
         } else {
             Err(lookahead.error())
         }
     }
 }
 
-pub struct ExprBinary {
-    pub(crate) lhs: Box<Expr>,
+pub struct AstBinary {
+    pub(crate) lhs: Box<AstExpr>,
     pub(crate) op: BinOp,
-    pub(crate) rhs: Box<Expr>,
+    pub(crate) rhs: Box<AstExpr>,
 }
 
-impl std::fmt::Debug for ExprBinary {
+impl std::fmt::Debug for AstBinary {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "({:?} {:?} {:?})", self.lhs, self.op, self.rhs)
     }
 }
 
-impl Spanned for ExprBinary {
+impl Spanned for AstBinary {
     fn span(&self) -> Span {
         let start = self.lhs.span().start;
         let end = self.rhs.span().end;
@@ -130,9 +184,9 @@ impl Spanned for ExprBinary {
     }
 }
 
-impl Parse for ExprBinary {
+impl Parse for AstBinary {
     fn parse(input: ParseStream) -> Result<Self, ParseError> {
-        Ok(ExprBinary {
+        Ok(AstBinary {
             lhs: Box::new(input.parse()?),
             op: input.parse()?,
             rhs: Box::new(input.parse()?),
@@ -192,18 +246,18 @@ impl Parse for BinOp {
     }
 }
 
-pub struct ExprUnary {
+pub struct AstUnary {
     pub(crate) op: UnaryOp,
-    pub(crate) expr: Box<Expr>,
+    pub(crate) expr: Box<AstExpr>,
 }
 
-impl std::fmt::Debug for ExprUnary {
+impl std::fmt::Debug for AstUnary {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "({:?} {:?})", self.op, self.expr)
     }
 }
 
-impl Spanned for ExprUnary {
+impl Spanned for AstUnary {
     fn span(&self) -> Span {
         let start = self.op.span().start;
         let end = self.expr.span().end;
@@ -211,9 +265,9 @@ impl Spanned for ExprUnary {
     }
 }
 
-impl Parse for ExprUnary {
+impl Parse for AstUnary {
     fn parse(input: ParseStream) -> Result<Self, ParseError> {
-        Ok(ExprUnary {
+        Ok(AstUnary {
             op: input.parse()?,
             expr: Box::new(parsing::parse_expr_lhs(input)?),
         })
@@ -252,27 +306,27 @@ impl Parse for UnaryOp {
     }
 }
 
-pub struct ExprGroup {
+pub struct AstGroup {
     pub(crate) delim: Delimiter,
-    pub(crate) expr: Box<Expr>,
+    pub(crate) expr: Box<AstExpr>,
 }
 
-impl std::fmt::Debug for ExprGroup {
+impl std::fmt::Debug for AstGroup {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "({:?} {:?})", self.delim, self.expr)
     }
 }
 
-impl Spanned for ExprGroup {
+impl Spanned for AstGroup {
     fn span(&self) -> Span {
         self.expr.span()
     }
 }
 
-impl Parse for ExprGroup {
+impl Parse for AstGroup {
     fn parse(input: ParseStream) -> Result<Self, ParseError> {
         if let LexToken::Group(g, _) = input.next_token() {
-            let group = ExprGroup {
+            let group = AstGroup {
                 delim: g.delim,
                 expr: Box::new(input.parse()?)
             };
@@ -299,30 +353,30 @@ impl Precedence {
         }
     }
 
-    pub fn of(e: &Expr) -> Self {
+    pub fn of(e: &AstExpr) -> Self {
         match e {
-            Expr::Value(_) => Precedence::Unambiguous,
-            Expr::Binary(b) => Precedence::of_binop(&b.op),
-            Expr::Unary(_) => Precedence::Unary,
-            Expr::Group(_) => Precedence::Unambiguous,
-            Expr::FnCall(_) => Precedence::Unambiguous,
+            AstExpr::Value(_) => Precedence::Unambiguous,
+            AstExpr::Binary(b) => Precedence::of_binop(&b.op),
+            AstExpr::Unary(_) => Precedence::Unary,
+            AstExpr::Group(_) => Precedence::Unambiguous,
+            AstExpr::FnCall(_) => Precedence::Unambiguous,
         }
     }
 }
 
-pub struct ExprFnCall {
+pub struct AstFnCall {
     pub fn_name: Ident,
     pub parens: Paren,
-    pub inputs: Punctuated<Expr, Token![,]>
+    pub inputs: Punctuated<AstExpr, Token![,]>
 }
 
-impl std::fmt::Debug for ExprFnCall {
+impl std::fmt::Debug for AstFnCall {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "{:?}({:?})", self.fn_name, self.inputs)
     }
 }
 
-impl Spanned for ExprFnCall {
+impl Spanned for AstFnCall {
     fn span(&self) -> Span {
         let start = self.fn_name.span().start;
         let end = self.parens.span().end;
@@ -330,11 +384,11 @@ impl Spanned for ExprFnCall {
     }
 }
 
-impl Parse for ExprFnCall {
+impl Parse for AstFnCall {
     fn parse(input: ParseStream) -> Result<Self, ParseError> {
         let name = input.parse()?;
         let parens = input.parse()?;
-        Ok(ExprFnCall {
+        Ok(AstFnCall {
             fn_name: name,
             parens,
             inputs: parse_punctuated_group(input)?,
@@ -342,15 +396,149 @@ impl Parse for ExprFnCall {
     }
 }
 
-pub trait ExprVisit {
+#[derive(Debug)]
+pub struct VarDecl {
+    pub var_name: Ident,
+    pub equals: Token![=],
+    pub expr: AstExpr,
+}
+
+impl Spanned for VarDecl {
+    fn span(&self) -> Span {
+        Span {
+            start: self.var_name.span().start,
+            end: self.expr.span().end
+        }
+    }
+}
+
+impl Parse for VarDecl {
+    fn parse(input: ParseStream) -> Result<Self, ParseError> {
+        Ok(VarDecl {
+            var_name: input.parse()?,
+            equals: input.parse()?,
+            expr: input.parse()?,
+        })
+    }
+}
+
+#[derive(Debug)]
+pub struct FnSig {
+    pub fn_name: Ident,
+    pub parens: Paren,
+    pub inputs: Punctuated<Ident, Token![,]>
+}
+
+impl Spanned for FnSig {
+    fn span(&self) -> Span {
+        let end = self.inputs.try_span()
+            .or_else(|| Some(self.parens.span()))
+            .unwrap()
+            .end;
+
+        Span {
+            start: self.fn_name.span().start,
+            end
+        }
+    }
+}
+
+impl Parse for FnSig {
+    fn parse(input: ParseStream) -> Result<Self, ParseError> {
+        let fn_name = input.parse()?;
+        let parens = input.parse()?;
+        Ok(FnSig {
+            fn_name,
+            parens,
+            inputs: parse_punctuated_group(input)?,
+        })
+    }
+}
+
+pub fn parse_punctuated_group<T: Parse, S: Parse>(input: ParseStream)
+-> Result<Punctuated<T, S>, ParseError> {
+    let mut punctuated = Punctuated::new();
+    loop {
+        if input.peek::<End>() {
+            input.next_token();
+            break
+        }
+        let ident = input.parse()?;
+        punctuated.push_value(ident);
+
+        if input.peek::<End>() {
+            input.next_token();
+            break
+        }
+        let comma = input.parse()?;
+        punctuated.push_separator(comma);
+    }
+    Ok(punctuated)
+}
+
+#[derive(Debug)]
+pub struct FnDecl {
+    pub sig: FnSig,
+    pub equals: Token![=],
+    pub body: AstExpr,
+}
+
+impl Spanned for FnDecl {
+    fn span(&self) -> Span {
+        Span {
+            start: self.sig.span().start,
+            end: self.body.span().end
+        }
+    }
+}
+
+impl Parse for FnDecl {
+    fn parse(input: ParseStream) -> Result<Self, ParseError> {
+        let sig = input.parse()?;
+        let equals: Token![=] = input.parse()?;
+        let body = input.parse()?;
+        Ok(FnDecl {
+            sig,
+            equals,
+            body,
+        })
+    }
+}
+
+fn parse_ambiguous_fn(input: ParseStream) -> Result<AstStmt, ParseError> {
+    let begin = input.save_pos();
+
+    let name = input.parse()?;
+
+    if input.peek_ignore_group::<Token![=]>() {
+        let parens = input.parse()?;
+
+        let inputs = parse_punctuated_group(input)?;
+        let sig = FnSig {
+            fn_name: name,
+            parens,
+            inputs
+        };
+        Ok(FnDecl{
+            sig,
+            equals: input.parse()?,
+            body: input.parse()?,
+        }.into())
+    } else {
+        input.restore_pos(begin);
+        input.parse().map(AstStmt::Expr)
+    }
+}
+
+pub trait AstVisit {
     type Result;
 
-    fn visit_expr(&mut self, node: &Expr) -> Self::Result;
-    fn visit_value(&mut self, node: &ExprValue) -> Self::Result;
-    fn visit_binary(&mut self, node: &ExprBinary) -> Self::Result;
-    fn visit_unary(&mut self, node: &ExprUnary) -> Self::Result;
-    fn visit_fn_call(&mut self, node: &ExprFnCall) -> Self::Result;
-    fn visit_group(&mut self, node: &ExprGroup) -> Self::Result;
+    fn visit_expr(&mut self, expr: &AstExpr) -> Self::Result;
+    fn visit_value(&mut self, value: &AstValue) -> Self::Result;
+    fn visit_binary(&mut self, binary: &AstBinary) -> Self::Result;
+    fn visit_unary(&mut self, unary: &AstUnary) -> Self::Result;
+    fn visit_fn_call(&mut self, fn_call: &AstFnCall) -> Self::Result;
+    fn visit_group(&mut self, group: &AstGroup) -> Self::Result;
 }
 
 mod parsing {
@@ -358,15 +546,15 @@ mod parsing {
 
     use super::*;
 
-    pub fn parse_expr_lhs(input: ParseStream) -> Result<Expr, ParseError> {
+    pub fn parse_expr_lhs(input: ParseStream) -> Result<AstExpr, ParseError> {
         if input.peek::<Token![-]>() {
-            input.parse().map(Expr::Unary)
+            input.parse().map(AstExpr::Unary)
         } else if input.peek::<Ident>() && input.peek2::<Paren>() {
-            input.parse().map(Expr::FnCall)
+            input.parse().map(AstExpr::FnCall)
         } else if input.peek::<Literal>() || input.peek::<Ident>() {
-            input.parse().map(Expr::Value)
+            input.parse().map(AstExpr::Value)
         } else if input.peek::<Paren>() {
-            input.parse().map(Expr::Group)
+            input.parse().map(AstExpr::Group)
         } else {
             Err(input.error("Expected ident, literal, parens, unary operator"))
         }
@@ -374,9 +562,9 @@ mod parsing {
 
     pub fn parse_expr(
         input: ParseStream,
-        mut left: Expr,
+        mut left: AstExpr,
         base: Precedence
-    ) -> Result<Expr, ParseError> {
+    ) -> Result<AstExpr, ParseError> {
         loop {
             if input.peek::<End>() {
                 break;
@@ -394,7 +582,7 @@ mod parsing {
                 input.restore_pos(begin);
                 break;
             } else {
-                left = ExprBinary {
+                left = AstBinary {
                     lhs: Box::new(left),
                     op,
                     rhs: parse_binop_rhs(input, precedence)?,
@@ -415,7 +603,7 @@ mod parsing {
     fn parse_binop_rhs(
         input: ParseStream,
         precedence: Precedence,
-    ) -> Result<Box<Expr>, ParseError> {
+    ) -> Result<Box<AstExpr>, ParseError> {
         let mut rhs = parse_expr_lhs(input)?;
         loop {
             let begin = input.save_pos();

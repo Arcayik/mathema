@@ -6,7 +6,7 @@ use crate::{
     function::{eval_function, FnArgs, Function},
     intrinsics,
     parsing::{
-        ast::{BinOp, Expr, ExprBinary, ExprFnCall, ExprGroup, ExprUnary, ExprValue, ExprVisit, Stmt, UnaryOp},
+        ast::{BinOp, AstExpr, AstBinary, AstFnCall, AstGroup, AstUnary, AstValue, AstVisit, AstStmt, UnaryOp},
         token::Span
     },
     symbol::Symbol
@@ -43,18 +43,18 @@ impl std::fmt::Display for AlgStmt {
 }
 
 impl AlgStmt {
-    pub fn from_expr_stmt(stmt: &Stmt) -> Self {
+    pub fn from_expr_stmt(stmt: &AstStmt) -> Self {
         match stmt {
-            Stmt::Expr(expr) => {
+            AstStmt::Expr(expr) => {
                 let alg = ExprToAlgebra.visit_expr(expr);
                 AlgStmt::Expr(alg)
             },
-            Stmt::VarDecl(decl) => {
+            AstStmt::VarDecl(decl) => {
                 let name = decl.var_name.symbol;
                 let alg = ExprToAlgebra.visit_expr(&decl.expr);
                 AlgStmt::VarDecl(name, alg)
             },
-            Stmt::FnDecl(decl) => {
+            AstStmt::FnDecl(decl) => {
                 let name = decl.sig.fn_name.symbol;
                 let alg = ExprToAlgebra.visit_expr(&decl.body);
 
@@ -198,58 +198,58 @@ pub struct FnCall {
 
 pub struct ExprToAlgebra;
 
-impl ExprVisit for ExprToAlgebra {
+impl AstVisit for ExprToAlgebra {
     type Result = AlgExpr;
 
-    fn visit_expr(&mut self, node: &Expr) -> Self::Result {
-        match node {
-            Expr::Value(e) => self.visit_value(e),
-            Expr::Unary(e) => self.visit_unary(e),
-            Expr::Binary(e) => self.visit_binary(e),
-            Expr::FnCall(e) => self.visit_fn_call(e),
-            Expr::Group(e) => self.visit_group(e),
+    fn visit_expr(&mut self, expr: &AstExpr) -> Self::Result {
+        match expr {
+            AstExpr::Value(e) => self.visit_value(e),
+            AstExpr::Unary(e) => self.visit_unary(e),
+            AstExpr::Binary(e) => self.visit_binary(e),
+            AstExpr::FnCall(e) => self.visit_fn_call(e),
+            AstExpr::Group(e) => self.visit_group(e),
         }
     }
 
-    fn visit_value(&mut self, node: &ExprValue) -> Self::Result {
-        match node {
-            ExprValue::Literal(l) => Value::Num(l.num).into(),
-            ExprValue::Ident(id) => Value::Var(id.symbol).into()
+    fn visit_value(&mut self, value: &AstValue) -> Self::Result {
+        match value {
+            AstValue::Literal(l) => Value::Num(l.num).into(),
+            AstValue::Ident(id) => Value::Var(id.symbol).into()
         }
     }
 
-    fn visit_binary(&mut self, node: &ExprBinary) -> Self::Result {
-        let left = self.visit_expr(&node.lhs);
-        let right = self.visit_expr(&node.rhs);
+    fn visit_binary(&mut self, binary: &AstBinary) -> Self::Result {
+        let left = self.visit_expr(&binary.lhs);
+        let right = self.visit_expr(&binary.rhs);
 
         Binary {
             left: Box::new(left),
-            op: node.op.clone().into(),
+            op: binary.op.clone().into(),
             right: Box::new(right),
         }.into()
     }
 
-    fn visit_unary(&mut self, node: &ExprUnary) -> Self::Result {
-        let expr_node = self.visit_expr(&node.expr);
+    fn visit_unary(&mut self, unary: &AstUnary) -> Self::Result {
+        let expr_node = self.visit_expr(&unary.expr);
 
         Unary {
-            op: node.op.clone().into(),
+            op: unary.op.clone().into(),
             expr: Box::new(expr_node)
         }.into()
     }
 
-    fn visit_group(&mut self, node: &ExprGroup) -> Self::Result {
-        self.visit_expr(&node.expr)
+    fn visit_group(&mut self, group: &AstGroup) -> Self::Result {
+        self.visit_expr(&group.expr)
     }
 
-    fn visit_fn_call(&mut self, node: &ExprFnCall) -> Self::Result {
-        let args: Vec<AlgExpr> = node.inputs.iter()
+    fn visit_fn_call(&mut self, fn_call: &AstFnCall) -> Self::Result {
+        let args: Vec<AlgExpr> = fn_call.inputs.iter()
             .map(|expr| self.visit_expr(expr))
             .collect();
 
         FnCall {
             args,
-            func: node.fn_name.symbol
+            func: fn_call.fn_name.symbol
         }.into()
     }
 }

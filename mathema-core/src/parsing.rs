@@ -2,15 +2,8 @@
 pub mod token;
 pub mod lexer;
 pub mod parser;
+pub mod ast;
 pub mod punctuated;
-
-mod expr;
-mod stmt;
-
-pub mod ast {
-    pub use super::expr::*;
-    pub use super::stmt::*;
-}
 
 #[cfg(test)]
 mod tests {
@@ -18,7 +11,7 @@ mod tests {
         parsing::{
             lexer::tokenize,
             parser::ParseBuffer, 
-            ast::Stmt,
+            ast::AstStmt,
         }
     };
 
@@ -67,7 +60,7 @@ mod tests {
         } 
 
         let parser = ParseBuffer::new(tokens);
-        let ast = parser.parse::<Stmt>();
+        let ast = parser.parse::<AstStmt>();
 
         println!("Input: [{}]", input);
         println!("AST: \n{:#?}", ast);

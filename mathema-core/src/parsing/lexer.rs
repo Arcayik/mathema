@@ -409,20 +409,23 @@ mod lexing {
 
     pub fn ident(tokenizer: &mut Tokenizer) -> LexToken {
         let start = tokenizer.lexer.mark();
-        let span = tokenizer.lexer.span_from(start);
         let ident_str = tokenizer.lexer.eat_while(|ch| ch.is_alphanumeric() || ch == '_');
-        LexToken::Ident(Ident { symbol: Symbol::intern(ident_str), span })
+        let symbol = Symbol::intern(ident_str);
+        let span = tokenizer.lexer.span_from(start);
+        LexToken::Ident(Ident { symbol, span })
     }
 
     pub fn literal(tokenizer: &mut Tokenizer) -> Option<LexToken> {
         let start = tokenizer.lexer.mark();
-        let span = tokenizer.lexer.span_from(start);
         let number_str = tokenizer.lexer.eat_while(|ch| ch.is_ascii_digit() || ch == '.');
-        if let Ok(num) = number_str.parse::<f64>() {
+        let result = number_str.parse::<f64>();
+        let span = tokenizer.lexer.span_from(start);
+
+        if let Ok(num) = result {
             Some(LexToken::Literal(Literal { num, span }))
         } else {
             tokenizer.num_parse_error(span);
-            None
+            return None
         }
     }
 }

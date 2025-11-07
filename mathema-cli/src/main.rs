@@ -30,6 +30,13 @@ impl Prompt {
         if let Some(src) = error.source_code() {
             println!("{}", src);
         }
+        if let Some(mut spans) = error.spans() 
+            && let Some(span) = spans.next() {
+                let until = span.start;
+                let len = span.end - span.start;
+                print!("{}", " ".repeat(3 + until));
+                println!("{}", "^".repeat(len));
+        }
         println!("{}", error.message());
     }
 

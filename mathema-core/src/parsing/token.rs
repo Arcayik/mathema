@@ -6,10 +6,16 @@ use crate::{
     symbol::Symbol
 };
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Span {
     pub start: usize,
     pub end: usize,
+}
+
+impl From<(usize, usize)> for Span {
+    fn from(value: (usize, usize)) -> Self {
+        Span { start: value.0, end: value.1 }
+    }
 }
 
 pub trait Spanned {
@@ -145,6 +151,12 @@ pub struct Literal {
     pub span: Span,
 }
 
+impl PartialEq<Literal> for Literal {
+    fn eq(&self, other: &Literal) -> bool {
+        self.num == other.num
+    }
+}
+
 impl Token for Literal {
     fn peek<'s>(input: ParseStream) -> bool {
         matches!(input.peek_token(), LexToken::Literal(_))
@@ -169,6 +181,12 @@ impl_spanned! { Literal }
 pub struct Ident {
     pub symbol: Symbol,
     pub span: Span,
+}
+
+impl PartialEq<Ident> for Ident {
+    fn eq(&self, other: &Ident) -> bool {
+        self.symbol == other.symbol
+    }
 }
 
 impl Token for Ident {
@@ -201,7 +219,7 @@ impl_spanned! { Punct }
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum Delimiter {
-    /// { ... }
+    /// ( ... )
     Parenthesis,
     /// { ... }
     Brace,

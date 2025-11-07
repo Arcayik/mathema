@@ -5,7 +5,7 @@ use super::{
     token::{Delimiter, End, Ident, Literal, Paren, Parse, Span, Spanned, Token}
 };
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq)]
 pub enum AstStmt {
     Expr(AstExpr),
     VarDecl(VarDecl),
@@ -51,6 +51,7 @@ impl Parse for AstStmt {
             input.parse().map(AstStmt::Expr)?
         };
 
+        // TODO: move this to AstExpr parsing
         if !input.peek::<End>() {
             return Err(input.error("Trailing token"))
         }
@@ -59,6 +60,7 @@ impl Parse for AstStmt {
     }
 }
 
+#[derive(PartialEq)]
 pub enum AstExpr {
     Value(AstValue),
     Binary(AstBinary),
@@ -128,6 +130,7 @@ impl Parse for AstExpr {
     }
 }
 
+#[derive(PartialEq)]
 pub enum AstValue {
     Literal(Literal),
     Ident(Ident),
@@ -173,6 +176,12 @@ pub struct AstBinary {
 impl std::fmt::Debug for AstBinary {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "({:?} {:?} {:?})", self.lhs, self.op, self.rhs)
+    }
+}
+
+impl PartialEq<AstBinary> for AstBinary {
+    fn eq(&self, other: &AstBinary) -> bool {
+        self.lhs == other.lhs && self.rhs == other.rhs
     }
 }
 
@@ -257,6 +266,12 @@ impl std::fmt::Debug for AstUnary {
     }
 }
 
+impl PartialEq<AstUnary> for AstUnary {
+    fn eq(&self, other: &AstUnary) -> bool {
+        self.expr == other.expr
+    }
+}
+
 impl Spanned for AstUnary {
     fn span(&self) -> Span {
         let start = self.op.span().start;
@@ -306,6 +321,7 @@ impl Parse for UnaryOp {
     }
 }
 
+#[derive(PartialEq)]
 pub struct AstGroup {
     pub(crate) delim: Delimiter,
     pub(crate) expr: Box<AstExpr>,
@@ -376,6 +392,13 @@ impl std::fmt::Debug for AstFnCall {
     }
 }
 
+impl PartialEq<AstFnCall> for AstFnCall {
+    fn eq(&self, other: &AstFnCall) -> bool {
+        self.fn_name == other.fn_name
+            && Iterator::eq(self.inputs.iter(), other.inputs.iter())
+    }
+}
+
 impl Spanned for AstFnCall {
     fn span(&self) -> Span {
         let start = self.fn_name.span().start;
@@ -400,7 +423,14 @@ impl Parse for AstFnCall {
 pub struct VarDecl {
     pub var_name: Ident,
     pub equals: Token![=],
-    pub expr: AstExpr,
+    pub expr: Box<AstExpr>,
+}
+
+impl PartialEq<VarDecl> for VarDecl {
+    fn eq(&self, other: &VarDecl) -> bool {
+        self.var_name == other.var_name
+            && self.expr == other.expr
+    }
 }
 
 impl Spanned for VarDecl {
@@ -417,7 +447,7 @@ impl Parse for VarDecl {
         Ok(VarDecl {
             var_name: input.parse()?,
             equals: input.parse()?,
-            expr: input.parse()?,
+            expr: Box::new(input.parse()?),
         })
     }
 }
@@ -427,6 +457,13 @@ pub struct FnSig {
     pub fn_name: Ident,
     pub parens: Paren,
     pub inputs: Punctuated<Ident, Token![,]>
+}
+
+impl PartialEq<FnSig> for FnSig {
+    fn eq(&self, other: &FnSig) -> bool {
+        self.fn_name == other.fn_name
+            && Iterator::eq(self.inputs.iter(), other.inputs.iter())
+    }
 }
 
 impl Spanned for FnSig {
@@ -480,14 +517,21 @@ pub fn parse_punctuated_group<T: Parse, S: Parse>(input: ParseStream)
 pub struct FnDecl {
     pub sig: FnSig,
     pub equals: Token![=],
-    pub body: AstExpr,
+    pub expr: AstExpr,
+}
+
+impl PartialEq<FnDecl> for FnDecl {
+    fn eq(&self, other: &FnDecl) -> bool {
+        self.sig == other.sig
+            && self.expr == other.expr
+    }
 }
 
 impl Spanned for FnDecl {
     fn span(&self) -> Span {
         Span {
             start: self.sig.span().start,
-            end: self.body.span().end
+            end: self.expr.span().end
         }
     }
 }
@@ -500,7 +544,7 @@ impl Parse for FnDecl {
         Ok(FnDecl {
             sig,
             equals,
-            body,
+            expr: body,
         })
     }
 }
@@ -522,7 +566,7 @@ fn parse_ambiguous_fn(input: ParseStream) -> Result<AstStmt, ParseError> {
         Ok(FnDecl{
             sig,
             equals: input.parse()?,
-            body: input.parse()?,
+            expr: input.parse()?,
         }.into())
     } else {
         input.restore_pos(begin);

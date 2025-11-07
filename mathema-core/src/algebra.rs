@@ -56,7 +56,7 @@ impl AlgStmt {
             },
             AstStmt::FnDecl(decl) => {
                 let name = decl.sig.fn_name.symbol;
-                let alg = ExprToAlgebra.visit_expr(&decl.body);
+                let alg = ExprToAlgebra.visit_expr(&decl.expr);
 
                 let arg_vec: Vec<Symbol> = decl.sig.inputs
                     .iter()

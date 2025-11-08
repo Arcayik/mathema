@@ -387,7 +387,7 @@ pub fn eval_algebra(context: &Context, algebra: &AlgExpr) -> Result<f64, Vec<Eva
                 }
             },
             AlgExpr::Unary(un) => {
-                if let Some(val) = recurse(context, root, algebra, errors) {
+                if let Some(val) = recurse(context, root, &un.expr, errors) {
                     match un.op {
                         AlgUnaryOp::Neg => Some(- val)
                     }

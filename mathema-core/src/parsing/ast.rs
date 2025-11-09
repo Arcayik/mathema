@@ -51,11 +51,6 @@ impl Parse for AstStmt {
             input.parse().map(AstStmt::Expr)?
         };
 
-        // TODO: move this to AstExpr parsing
-        if !input.peek::<End>() {
-            return Err(input.error("Trailing token"))
-        }
-
         Ok(stmt)
     }
 }
@@ -125,7 +120,7 @@ impl Spanned for AstExpr {
 
 impl Parse for AstExpr {
     fn parse(input: ParseStream) -> Result<Self, ParseError> {
-        let lhs = parsing::parse_expr_lhs(input)?;
+        let lhs = parsing::parse_atom(input)?;
         parsing::parse_expr(input, lhs, Precedence::MIN)
     }
 }
@@ -284,7 +279,7 @@ impl Parse for AstUnary {
     fn parse(input: ParseStream) -> Result<Self, ParseError> {
         Ok(AstUnary {
             op: input.parse()?,
-            expr: Box::new(parsing::parse_expr_lhs(input)?),
+            expr: Box::new(parsing::parse_atom(input)?),
         })
     }
 }
@@ -590,7 +585,7 @@ mod parsing {
 
     use super::*;
 
-    pub fn parse_expr_lhs(input: ParseStream) -> Result<AstExpr, ParseError> {
+    pub fn parse_atom(input: ParseStream) -> Result<AstExpr, ParseError> {
         if input.peek::<Token![-]>() {
             input.parse().map(AstExpr::Unary)
         } else if input.peek::<Ident>() && input.peek2::<Paren>() {
@@ -600,7 +595,7 @@ mod parsing {
         } else if input.peek::<Paren>() {
             input.parse().map(AstExpr::Group)
         } else {
-            Err(input.error("Expected ident, literal, parens, unary operator"))
+            Err(input.error("Expected ident, literal, paren, or unary operator"))
         }
     }
 
@@ -610,17 +605,23 @@ mod parsing {
         base: Precedence
     ) -> Result<AstExpr, ParseError> {
         loop {
-            if input.peek::<End>() {
+            if input.peek::<End>() || input.peek::<Token![,]>() {
                 break;
             }
             if !peek_binop(input) {
-                break
+                return Err(input.error("Unexpected token"));
             }
+            // TODO: allow for multiplication exprs such as 2x (6)(7) and 3sin(x) 
 
             let begin = input.save_pos();
 
             let op = input.parse()?;
             let precedence = Precedence::of_binop(&op);
+
+            if input.peek::<End>() || input.peek::<Token![,]>() {
+                input.restore_pos(begin);
+                return Err(input.error("Trailing operator"));
+            }
 
             if precedence < base {
                 input.restore_pos(begin);
@@ -648,7 +649,7 @@ mod parsing {
         input: ParseStream,
         precedence: Precedence,
     ) -> Result<Box<AstExpr>, ParseError> {
-        let mut rhs = parse_expr_lhs(input)?;
+        let mut rhs = parse_atom(input)?;
         loop {
             let begin = input.save_pos();
             let next = peek_precedence(input);

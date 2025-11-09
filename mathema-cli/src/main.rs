@@ -27,9 +27,6 @@ impl Prompt {
     }
 
     pub fn show_error(&self, error: &dyn Diagnostic) {
-        if let Some(src) = error.source_code() {
-            println!("{}", src);
-        }
         if let Some(mut spans) = error.spans() 
             && let Some(span) = spans.next() {
                 let until = span.start;

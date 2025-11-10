@@ -82,12 +82,21 @@ impl TokenBuffer {
         TokenBuffer(Box::new([]))
     }
 
-    pub fn from_boxed_slice(slice: Box<[LexToken]>) -> Self {
-        TokenBuffer(slice)
+    pub fn from_slice(input: impl AsRef<[LexToken]>) -> Self {
+        let slice = input.as_ref();
+        TokenBuffer(Box::from(slice))
     }
+}
 
-    pub fn from_vec(vec: Vec<LexToken>) -> Self {
-        TokenBuffer(vec.into_boxed_slice())
+impl From<Box<[LexToken]>> for TokenBuffer {
+    fn from(value: Box<[LexToken]>) -> Self {
+        TokenBuffer(value)
+    }
+}
+
+impl From<Vec<LexToken>> for TokenBuffer {
+    fn from(value: Vec<LexToken>) -> Self {
+        TokenBuffer(value.into())
     }
 }
 
@@ -389,7 +398,7 @@ pub fn tokenize(input: &str) -> (TokenBuffer, Vec<LexError>) {
     tokenizer.tokenize();
     tokenizer.handle_unclosed_groups();
 
-    let tokens = TokenBuffer::from_vec(tokenizer.tokens);
+    let tokens = tokenizer.tokens.into();
     let errors = tokenizer.errors;
     (tokens, errors)
 }

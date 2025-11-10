@@ -425,7 +425,7 @@ mod lexing {
             Some(LexToken::Literal(Literal { num, span }))
         } else {
             tokenizer.num_parse_error(span);
-            return None
+            None
         }
     }
 }

@@ -61,7 +61,12 @@ mod tests {
     }
 
     fn mul(lhs: AstExpr, rhs: AstExpr) -> AstExpr {
-        let op = BinOp::Mul(Star { span: EMPTY });
+        let op = BinOp::Mul(Some(Star { span: EMPTY }));
+        AstBinary { lhs: Box::new(lhs), op, rhs: Box::new(rhs) }.into()
+    }
+
+    fn impl_mul(lhs: AstExpr, rhs: AstExpr) -> AstExpr {
+        let op = BinOp::Mul(None);
         AstBinary { lhs: Box::new(lhs), op, rhs: Box::new(rhs) }.into()
     }
 
@@ -90,7 +95,6 @@ mod tests {
         assert_eq!(parse("_long_ident_").unwrap(), var("_long_ident_").into());
         // TODO FIX: This overflows the stack!!! SOMETIMES?!?!?!?!
         // assert_ne!(parse(" ").unwrap(), var(" ").into());
-        assert!(fails_at("3fail", (1, 5)));
         assert_eq!(parse("works55").unwrap(), var("works55").into());
         assert_eq!(parse("b_3").unwrap(), var("b_3").into());
     }
@@ -111,11 +115,9 @@ mod tests {
     fn unexpected_and_trailing() {
         assert!(fails_at("9.98 /", (5, 6)));
         assert!(fails_at("1 + +", (4, 5)));
-        assert!(fails_at("1 + 3 * 5 var", (10, 13)));
-        assert!(fails_at("1 / 3 x y", (6, 7)));
-        assert!(fails_at("1 3 * 5 var", (2, 3)));
         assert!(fails_at("(1 + 3)*", (7, 8)));
         assert!(fails_at("(6-7)/(9/)", (8, 9)));
+        assert!(fails_at("1 3 * 5 var", (2, 3)));
     }
 
     #[test]
@@ -139,5 +141,21 @@ mod tests {
         assert_eq!(parse("((1+1) * 30)").unwrap(), expected);
         assert!(fails_at("()", (0, 2)));
         assert!(fails_at("(2*4) )", (6, 7)));
+    }
+
+    #[test]
+    fn implied_multiplication() {
+        let expected = impl_mul(
+            impl_mul(
+                mul(
+                    lit(1.0),
+                    lit(3.0),
+                ),
+                var("x"),
+            ),
+            var("y")
+        );
+        assert_eq!(parse("1 * 3 x y").unwrap(), expected);
+        assert_eq!(parse("3(4.2x)").unwrap(), impl_mul(lit(3.0), group(impl_mul(lit(4.2), var("x")))) )
     }
 }

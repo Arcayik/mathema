@@ -202,7 +202,7 @@ impl Parse for AstBinary {
 pub enum BinOp {
     Add(Token![+]),
     Sub(Token![-]),
-    Mul(Token![*]),
+    Mul(Option<Token![*]>),
     Div(Token![/]),
     Exp(Token![^])
 }
@@ -219,18 +219,6 @@ impl std::fmt::Debug for BinOp {
     }
 }
 
-impl Spanned for BinOp {
-    fn span(&self) -> Span {
-        match self {
-            Self::Add(t) => t.span(),
-            Self::Sub(t) => t.span(),
-            Self::Mul(t) => t.span(),
-            Self::Div(t) => t.span(),
-            Self::Exp(t) => t.span(),
-        }
-    }
-}
-
 impl Parse for BinOp {
     fn parse(input: ParseStream) -> Result<Self, ParseError> {
         if input.peek::<Token![+]>() {
@@ -238,7 +226,7 @@ impl Parse for BinOp {
         } else if input.peek::<Token![-]>() {
             input.parse().map(BinOp::Sub)
         } else if input.peek::<Token![*]>() {
-            input.parse().map(BinOp::Mul)
+            input.parse().map(Some).map(BinOp::Mul)
         } else if input.peek::<Token![/]>() {
             input.parse().map(BinOp::Div)
         } else if input.peek::<Token![^]>() {
@@ -608,12 +596,28 @@ mod parsing {
             if input.peek::<End>() || input.peek::<Token![,]>() {
                 break;
             }
+
+            let begin = input.save_pos();
+
+            // allow for implied multiplication
+            if input.peek::<Ident>() || input.peek::<Paren>() {
+                let precedence = Precedence::Product;
+                if precedence < base {
+                    input.restore_pos(begin);
+                    break;
+                } else {
+                    left = AstBinary {
+                        lhs: Box::new(left),
+                        op: BinOp::Mul(None),
+                        rhs: parse_binop_rhs(input, precedence)?,
+                    }.into();
+                }
+                continue
+            }
+
             if !peek_binop(input) {
                 return Err(input.error("Unexpected token"));
             }
-            // TODO: allow for multiplication exprs such as 2x (6)(7) and 3sin(x) 
-
-            let begin = input.save_pos();
 
             let op = input.parse()?;
             let precedence = Precedence::of_binop(&op);

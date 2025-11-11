@@ -1,3 +1,5 @@
+use crate::algebra::{AlgBinOp, AlgExpr};
+
 use super::{
     lexer::LexToken,
     parser::{ParseError, ParseStream},
@@ -344,7 +346,7 @@ pub enum Precedence { Assign, Sum, Product, Unary, Exponent, Unambiguous }
 impl Precedence {
     pub(crate) const MIN: Self = Precedence::Assign;
 
-    pub fn of_binop(op: &BinOp) -> Self {
+    pub fn of_ast_binop(op: &BinOp) -> Self {
         match op {
             BinOp::Add(_) | BinOp::Sub(_) => Precedence::Sum,
             BinOp::Mul(_) | BinOp::Div(_) => Precedence::Product,
@@ -352,13 +354,30 @@ impl Precedence {
         }
     }
 
-    pub fn of(e: &AstExpr) -> Self {
+    pub fn of_alg_binop(op: &AlgBinOp) -> Self {
+        match op {
+            AlgBinOp::Add | AlgBinOp::Sub => Precedence::Sum,
+            AlgBinOp::Mul | AlgBinOp::Div => Precedence::Product,
+            AlgBinOp::Exp => Precedence::Exponent
+        }
+    }
+
+    pub fn of_ast(e: &AstExpr) -> Self {
         match e {
             AstExpr::Value(_) => Precedence::Unambiguous,
-            AstExpr::Binary(b) => Precedence::of_binop(&b.op),
+            AstExpr::Binary(b) => Precedence::of_ast_binop(&b.op),
             AstExpr::Unary(_) => Precedence::Unary,
             AstExpr::Group(_) => Precedence::Unambiguous,
             AstExpr::FnCall(_) => Precedence::Unambiguous,
+        }
+    }
+
+    pub fn of_alg(e: &AlgExpr) -> Self {
+        match e {
+            AlgExpr::Value(_) => Precedence::Unambiguous,
+            AlgExpr::Binary(b) => Precedence::of_alg_binop(&b.op),
+            AlgExpr::Unary(_) => Precedence::Unary,
+            AlgExpr::FnCall(_) => Precedence::Unambiguous,
         }
     }
 }
@@ -620,7 +639,7 @@ mod parsing {
             }
 
             let op = input.parse()?;
-            let precedence = Precedence::of_binop(&op);
+            let precedence = Precedence::of_ast_binop(&op);
 
             if input.peek::<End>() || input.peek::<Token![,]>() {
                 input.restore_pos(begin);
@@ -675,7 +694,7 @@ mod parsing {
         let begin = input.save_pos();
 
         let precedence = if let Ok(op) = input.parse() {
-            Precedence::of_binop(&op)
+            Precedence::of_ast_binop(&op)
         } else if input.peek::<Token![=]>() {
             Precedence::Assign
         } else {

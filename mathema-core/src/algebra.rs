@@ -459,19 +459,6 @@ pub fn eval_algebra(context: &Context, algebra: &AlgExpr) -> Result<f64, Vec<Eva
 }
 
 pub fn algebra_to_string(algebra: &AlgExpr, take_span: &[&AlgExpr]) -> (String, Vec<Span>) {
-    // TODO: parenthesis when precedence mismatches!
-    /*
-     *    +
-     *   1 *  => 1+2*3
-     *    2 3
-     *
-     *   *  
-     *  + 3 => 1+2*3 => (1+2)*3
-     * 1 2 
-     *
-     * if subtree has lower precedence!
-     */
-
     fn recurse(
         algebra: &AlgExpr,
         take_span: &[&AlgExpr],

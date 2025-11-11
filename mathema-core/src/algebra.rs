@@ -6,7 +6,7 @@ use crate::{
     function::{eval_function, FnArgs, Function},
     intrinsics,
     parsing::{
-        ast::{BinOp, AstExpr, AstBinary, AstFnCall, AstGroup, AstUnary, AstValue, AstVisit, AstStmt, UnaryOp},
+        ast::{AstBinary, AstExpr, AstFnCall, AstGroup, AstStmt, AstUnary, AstValue, AstVisit, BinOp, Precedence, UnaryOp},
         token::Span
     },
     symbol::Symbol
@@ -495,9 +495,31 @@ pub fn algebra_to_string(algebra: &AlgExpr, take_span: &[&AlgExpr]) -> (String, 
                 }
             },
             AlgExpr::Binary(bin) => {
-                recurse(&bin.left, take_span, string, spans);
-                string.push_str(&format!(" {} ", bin.op));
-                recurse(&bin.right, take_span, string, spans);
+                {
+                    let mut left_str = String::new();
+                    recurse(&bin.left, take_span, &mut left_str, spans);
+                    if Precedence::of_alg(&bin.left) < Precedence::of_alg_binop(&bin.op) {
+                        string.push_str(&format!("({})", left_str));
+                    } else {
+                        string.push_str(&left_str)
+                    }
+                }
+
+                if matches!(bin.op, AlgBinOp::Mul)
+                    && matches!(*bin.left, AlgExpr::Value(Value::Num(_)))
+                    && matches!(*bin.right, AlgExpr::Value(Value::Var(_)) | AlgExpr::FnCall(_)) {
+                        // implicit multiplication, print nothing
+                } else {
+                    string.push_str(&format!(" {} ", bin.op));
+                }
+
+                let mut right_str = String::new();
+                recurse(&bin.right, take_span, &mut right_str, spans);
+                if Precedence::of_alg(&bin.right) < Precedence::of_alg_binop(&bin.op) {
+                    string.push_str(&format!("({})", right_str));
+                } else {
+                    string.push_str(&right_str)
+                }
             },
             AlgExpr::FnCall(fc) => {
                 string.push_str(fc.func.as_str());

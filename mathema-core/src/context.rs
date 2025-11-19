@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 
 use crate::{
-    algebra::{algebra_to_string, eval_algebra, AlgExpr, AlgStmt, Value, EvalError, EvalErrorKind},
+    algebra::{algebra_to_string, eval_algebra, AlgExpr, AlgStmt, EvalError, EvalErrorKind, Value},
     error::Diagnostic,
     function::{function_to_string, Function},
     intrinsics,
@@ -10,7 +10,7 @@ use crate::{
         lexer::tokenize,
         parser::ParseBuffer, token::Span,
     },
-    symbol::Symbol
+    symbol::Symbol, value::MathemaValue
 };
 
 #[derive(Default)]
@@ -49,19 +49,21 @@ impl Context {
 pub enum CallError {
     BadArgs(isize),
     Eval(Vec<EvalError>),
+    NotDefined(Symbol)
 }
 
 impl std::fmt::Display for CallError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Self::BadArgs(_off) => write!(f, "wrong number of arguments"),
-            Self::Eval(e) => write!(f, "Eval errors: {e:?}")
+            Self::Eval(e) => write!(f, "eval errors: {e:?}"),
+            Self::NotDefined(name) => write!(f, "function '{}' not defined", name),
         }
     }
 }
 
 pub enum Outcome {
-    Answer(f64),
+    Answer(MathemaValue),
     Var(Symbol),
     Fn(Symbol)
 }
@@ -85,7 +87,7 @@ pub fn mathema_parse(context: &mut Context, input: &str) -> Result<Outcome, Vec<
         AlgStmt::Expr(expr) => {
             match eval_algebra(context, &expr) {
                 Ok(ans) => {
-                    context.set_variable(Symbol::intern("ans"), AlgExpr::Value(Value::Num(ans)));
+                    context.set_variable(Symbol::intern("ans"), AlgExpr::Value(Value::Num(ans.clone())));
                     Ok(Outcome::Answer(ans))
                 },
                 Err(e) => {

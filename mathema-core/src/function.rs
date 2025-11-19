@@ -1,5 +1,5 @@
 use crate::{
-    algebra::{self, algebra_to_string, eval_algebra, AlgExpr, EvalError, EvalErrorKind}, context::{CallError, Context}, intrinsics, parsing::token::Span, symbol::Symbol
+    algebra::{self, algebra_to_string, eval_algebra, AlgExpr, EvalError, EvalErrorKind}, context::{CallError, Context}, intrinsics, parsing::token::Span, symbol::Symbol, value::MathemaValue
 };
 
 #[derive(Debug)]
@@ -90,26 +90,26 @@ impl std::fmt::Display for ArgInUse {
 
 impl std::error::Error for ArgInUse {}
 
-pub fn eval_function(context: &Context, function: &Function, input: &[f64]) -> Result<f64, CallError> {
+fn eval_user_function(context: &Context, function: &Function, input: &[MathemaValue]) -> Result<MathemaValue, CallError> {
     fn recurse(
         context: &Context,
         function: &Function,
-        input: &[f64],
+        input: &[MathemaValue],
         algebra: &AlgExpr,
         errors: &mut Vec<EvalError>,
-    ) -> Option<f64> {
+    ) -> Option<MathemaValue> {
         match algebra {
             AlgExpr::Value(val) => match val {
-                algebra::Value::Num(num) => Some(*num),
+                algebra::Value::Num(num) => Some(num.clone()),
                 algebra::Value::Var(var) => {
                     if let Some(idx) = function.args.idx_of(*var) {
-                        Some(input[idx])
+                        Some(input[idx].clone())
                     } else if let Some(expr) = context.get_variable(*var) {
                         eval_algebra(context, expr)
                             .map_err(|mut e| errors.append(&mut e))
                             .ok()
                     } else if let Some(c) = intrinsics::CONSTANTS.get(var) {
-                        Some(*c)
+                        Some(c.clone())
                     } else {
                         let (source, span) = algebra_to_string(&function.body, &[algebra]);
                         let error = EvalError {
@@ -125,7 +125,7 @@ pub fn eval_function(context: &Context, function: &Function, input: &[f64]) -> R
             AlgExpr::Unary(un) => {
                 if let Some(val) = recurse(context, function, input, &un.expr, errors) {
                     match un.op {
-                        algebra::AlgUnaryOp::Neg => Some(- val),
+                        algebra::AlgUnaryOp::Neg => Some(val.neg()),
                     }
                 } else {
                     None
@@ -137,49 +137,35 @@ pub fn eval_function(context: &Context, function: &Function, input: &[f64]) -> R
 
                 if let (Some(l), Some(r)) = (left, right) {
                     match bin.op {
-                        algebra::AlgBinOp::Add => Some(l + r),
-                        algebra::AlgBinOp::Sub => Some(l - r),
-                        algebra::AlgBinOp::Mul => Some(l * r),
-                        algebra::AlgBinOp::Div => Some(l / r),
-                        algebra::AlgBinOp::Exp => Some(l.powf(r)),
+                        algebra::AlgBinOp::Add => Some(l.add(&r)),
+                        algebra::AlgBinOp::Sub => Some(l.sub(&r)),
+                        algebra::AlgBinOp::Mul => Some(l.mul(&r)),
+                        algebra::AlgBinOp::Div => Some(l.div(&r)),
+                        algebra::AlgBinOp::Exp => Some(l.pow(&r)),
                     }
                 } else {
                     None
                 }
             },
             AlgExpr::FnCall(fc) => {
-                let args: Vec<f64> = fc.args
+                let args: Vec<MathemaValue> = fc.args
                     .iter()
                     .map(|a| recurse(context, function, input, a, errors))
                     .collect::<Option<_>>()?;
 
-                if let Some(func) = intrinsics::CONST_FNS.get(&fc.func) {
-                    return Some((func)(&args))
-                };
-
-                if let Some(func) = context.get_function(fc.func) {
-                    match eval_function(context, func, &args) {
-                        Ok(ans) => Some(ans),
-                        Err(e) => {
-                            let (source, span) = algebra_to_string(algebra, &[&func.body]);
-                            let error = EvalError {
-                                kind: EvalErrorKind::BadFnCall(e),
-                                source: source.into(),
-                                span: span[0]
-                            };
-                            errors.push(error);
-                            None
-                        }
+                match call_function(context, fc.name, &args) {
+                    Ok(ans) => Some(ans),
+                    Err(e) => {
+                        // TODO: if the function is intrinsic, what does the body look like?
+                        let (source, span) = algebra_to_string(algebra, &[]);
+                        let error = EvalError {
+                            kind: EvalErrorKind::BadFnCall(e),
+                            source: source.into(),
+                            span: span[0]
+                        };
+                        errors.push(error);
+                        None
                     }
-                } else {
-                    let (source, span) = algebra_to_string(&function.body, &[algebra]);
-                    let error = EvalError {
-                        kind: EvalErrorKind::UndefinedFunc(fc.func),
-                        source: source.into(),
-                        span: span[0]
-                    };
-                    errors.push(error);
-                    None
                 }
             }
         }
@@ -206,4 +192,14 @@ pub fn function_to_string(name: Symbol, function: &Function, take_span: &[&AlgEx
         span.end += span_offset;
     }
     (string, spans)
+}
+
+pub fn call_function(context: &Context, name: Symbol, input: &[MathemaValue]) -> Result<MathemaValue, CallError> {
+    if let Some(func) = context.get_function(name) {
+        eval_user_function(context, func, input)
+    } else if let Some(func) = intrinsics::CONST_FNS.get(&name) {
+        Ok((func)(input))
+    } else {
+        Err(CallError::NotDefined(name))
+    }
 }

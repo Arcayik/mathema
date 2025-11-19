@@ -2,7 +2,7 @@ use std::io::Write;
 
 use mathema_core::{
     context::{mathema_parse, Context, Outcome},
-    error::Diagnostic,
+    error::Diagnostic, value::MathemaValue,
 };
 
 pub struct Prompt {
@@ -37,7 +37,7 @@ impl Prompt {
         println!("{}", error.message());
     }
 
-    pub fn show_answer(&self, answer: f64) {
+    pub fn show_answer(&self, answer: MathemaValue) {
         println!("{}", answer);
     }
 }

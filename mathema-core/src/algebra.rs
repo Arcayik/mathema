@@ -1,15 +1,10 @@
 use std::rc::Rc;
 
 use crate::{
-    context::{CallError, Context},
-    error::Diagnostic,
-    function::{eval_function, FnArgs, Function},
-    intrinsics,
-    parsing::{
+    context::{CallError, Context}, error::Diagnostic, float, function::{call_function, FnArgs, Function}, intrinsics, parsing::{
         ast::{AstBinary, AstExpr, AstFnCall, AstGroup, AstStmt, AstUnary, AstValue, AstVisit, BinOp, Precedence, UnaryOp},
         token::Span
-    },
-    symbol::Symbol
+    }, symbol::Symbol, value::MathemaValue
 };
 
 pub enum AlgStmt {
@@ -85,8 +80,8 @@ impl From<Value> for AlgExpr {
     }
 }
 
-impl From<f64> for AlgExpr {
-    fn from(value: f64) -> Self {
+impl From<MathemaValue> for AlgExpr {
+    fn from(value: MathemaValue) -> Self {
         Value::Num(value).into()
     }
 }
@@ -117,7 +112,7 @@ impl From<FnCall> for AlgExpr {
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum Value {
-    Num(f64),
+    Num(MathemaValue),
     Var(Symbol),
 }
 
@@ -192,7 +187,7 @@ impl From<UnaryOp> for AlgUnaryOp {
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct FnCall {
-    pub(crate) func: Symbol,
+    pub(crate) name: Symbol,
     pub(crate) args: Vec<AlgExpr>,
 }
 
@@ -213,7 +208,7 @@ impl AstVisit for ExprToAlgebra {
 
     fn visit_value(&mut self, value: &AstValue) -> Self::Result {
         match value {
-            AstValue::Literal(l) => Value::Num(l.num).into(),
+            AstValue::Literal(l) => Value::Num(float!(l.num)).into(),
             AstValue::Ident(id) => Value::Var(id.symbol).into()
         }
     }
@@ -249,7 +244,7 @@ impl AstVisit for ExprToAlgebra {
 
         FnCall {
             args,
-            func: fn_call.fn_name.symbol
+            name: fn_call.fn_name.symbol
         }.into()
     }
 }
@@ -313,15 +308,14 @@ pub trait AlgebraFold {
             .into_iter()
             .map(|a| self.fold_expr(a))
             .collect();
-        let func = fn_call.func;
-        FnCall { args, func }
+        let func = fn_call.name;
+        FnCall { args, name: func }
     }
 }
 
 #[derive(Debug)]
 pub enum EvalErrorKind {
     UndefinedVar(Symbol),
-    UndefinedFunc(Symbol),
     BadFnCall(CallError)
 }
 
@@ -336,7 +330,6 @@ impl std::fmt::Display for EvalError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let str = match &self.kind {
             EvalErrorKind::UndefinedVar(s) => format!("undefined var: {s}"),
-            EvalErrorKind::UndefinedFunc(s) => format!("undefined func: {s}"),
             EvalErrorKind::BadFnCall(e) => e.to_string()
         };
         write!(f, "{}", str)
@@ -359,21 +352,21 @@ impl Diagnostic for EvalError {
     }
 }
 
-pub fn eval_algebra(context: &Context, algebra: &AlgExpr) -> Result<f64, Vec<EvalError>> {
+pub fn eval_algebra(context: &Context, algebra: &AlgExpr) -> Result<MathemaValue, Vec<EvalError>> {
     fn recurse(
         context: &Context,
         root: &AlgExpr,
         algebra: &AlgExpr,
         errors: &mut Vec<EvalError>
-    ) -> Option<f64> {
+    ) -> Option<MathemaValue> {
         match algebra {
             AlgExpr::Value(val) => match val {
-                Value::Num(num) => Some(*num),
+                Value::Num(num) => Some(num.clone()),
                 Value::Var(var) => {
                     if let Some(alg) = context.get_variable(*var) {
                         recurse(context, root, alg, errors)
                     } else if let Some(c) = intrinsics::CONSTANTS.get(var) {
-                        Some(*c)
+                        Some(c.clone())
                     } else {
                         let (source, span) = algebra_to_string(root, &[algebra]);
                         let error = EvalError {
@@ -389,7 +382,7 @@ pub fn eval_algebra(context: &Context, algebra: &AlgExpr) -> Result<f64, Vec<Eva
             AlgExpr::Unary(un) => {
                 if let Some(val) = recurse(context, root, &un.expr, errors) {
                     match un.op {
-                        AlgUnaryOp::Neg => Some(- val)
+                        AlgUnaryOp::Neg => Some(val.neg())
                     }
                 } else {
                     None
@@ -401,49 +394,39 @@ pub fn eval_algebra(context: &Context, algebra: &AlgExpr) -> Result<f64, Vec<Eva
 
                 if let (Some(l), Some(r)) = (left, right) {
                     match bin.op {
-                        AlgBinOp::Add => Some(l + r),
-                        AlgBinOp::Sub => Some(l - r),
-                        AlgBinOp::Mul => Some(l * r),
-                        AlgBinOp::Div => Some(l / r),
-                        AlgBinOp::Exp => Some(l.powf(r)),
+                        AlgBinOp::Add => Some(l.add(&r)),
+                        AlgBinOp::Sub => Some(l.sub(&r)),
+                        AlgBinOp::Mul => Some(l.mul(&r)),
+                        AlgBinOp::Div => Some(l.div(&r)),
+                        AlgBinOp::Exp => Some(l.pow(&r)),
                     }
                 } else {
                     None
                 }
             },
             AlgExpr::FnCall(fc) => {
-                let args: Vec<f64> = fc.args
+                let args: Vec<MathemaValue> = fc.args
                     .iter()
                     .map(|a| recurse(context, root, a, errors))
                     .collect::<Option<_>>()?;
 
-                if let Some(func) = intrinsics::CONST_FNS.get(&fc.func) {
+                if let Some(func) = intrinsics::CONST_FNS.get(&fc.name) {
                     return Some((func)(&args))
                 };
 
-                if let Some(func) = context.get_function(fc.func) {
-                    match eval_function(context, func, &args) {
-                        Ok(ans) => Some(ans),
-                        Err(e) => {
-                            let (source, span) = algebra_to_string(root, &[algebra]);
-                            let error = EvalError {
-                                kind: EvalErrorKind::BadFnCall(e),
-                                source: source.into(),
-                                span: span[0]
-                            };
-                            errors.push(error);
-                            None
-                        }
+                match call_function(context, fc.name, &args) {
+                    Ok(ans) => Some(ans),
+                    Err(e) => {
+                        // TODO: if the function is intrinsic, what does the body look like?
+                        let (source, span) = algebra_to_string(root, &[algebra]);
+                        let error = EvalError {
+                            kind: EvalErrorKind::BadFnCall(e),
+                            source: source.into(),
+                            span: span[0]
+                        };
+                        errors.push(error);
+                        None
                     }
-                } else {
-                    let (source, span) = algebra_to_string(root, &[algebra]);
-                    let error = EvalError {
-                        kind: EvalErrorKind::UndefinedFunc(fc.func),
-                        source: source.into(),
-                        span: span[0]
-                    };
-                    errors.push(error);
-                    None
                 }
             }
         }
@@ -509,7 +492,7 @@ pub fn algebra_to_string(algebra: &AlgExpr, take_span: &[&AlgExpr]) -> (String, 
                 }
             },
             AlgExpr::FnCall(fc) => {
-                string.push_str(fc.func.as_str());
+                string.push_str(fc.name.as_str());
                 string.push('(');
 
                 let mut arg_strings: Vec<String> = Vec::new();

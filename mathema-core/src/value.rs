@@ -21,6 +21,10 @@ impl std::fmt::Display for MathemaValue {
 }
 
 impl MathemaValue {
+    pub fn number(&self) -> Float {
+        self.inner.clone()
+    }
+
     pub fn add(self, rhs: &Self) -> Self {
         MathemaValue { inner: self.inner + rhs.inner.clone() }
     }

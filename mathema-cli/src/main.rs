@@ -31,7 +31,7 @@ impl Prompt {
             && let Some(span) = spans.next() {
                 let until = span.start;
                 let len = span.end - span.start;
-                print!("{}", " ".repeat(3 + until));
+                print!("{}", " ".repeat(self.prefix.len() + until));
                 println!("{}", "^".repeat(len));
         }
         println!("{}", error.message());
@@ -54,7 +54,7 @@ fn main() {
         let result = mathema_parse(&mut context, &input);
         match result {
             Ok(outcome) => handle_outcome(&prompt, outcome),
-            Err(errs) => errs.iter().for_each(|e| prompt.show_error(e.as_ref()))
+            Err(errs) => handle_errors(&prompt, errs),
         }
     }
 }
@@ -63,4 +63,9 @@ fn handle_outcome(state: &Prompt, outcome: Outcome) {
     if let Outcome::Answer(ans) = outcome {
         state.show_answer(ans)
     }
+}
+
+fn handle_errors(state: &Prompt, errors: Vec<Box<dyn Diagnostic>>) {
+    // errors.iter().for_each(|e| state.show_error(e.as_ref()))
+    errors.first().map(|e| state.show_error(e.as_ref()));
 }

@@ -10,7 +10,14 @@ pub mod parsing;
 
 #[cfg(test)]
 mod tests {
-    use crate::{algebra::{algebra_to_string, AlgExpr, ExprToAlgebra}, parsing::{ast::{AstExpr, AstVisit}, lexer::tokenize, parser::ParseBuffer}};
+    use crate::{
+        algebra::{algebra_to_string, AlgExpr, ExprToAlgebra},
+        parsing::{
+            ast::{AstExpr, AstVisit},
+            lexer::tokenize,
+            parser::ParseBuffer
+        }
+    };
 
     fn parse(input: &'static str) -> AlgExpr {
         let (tokens, errors) = tokenize(input);

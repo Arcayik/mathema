@@ -3,7 +3,7 @@ use std::collections::HashMap;
 use crate::{
     algebra::{algebra_to_string, eval_algebra, AlgExpr, AlgStmt, EvalError, EvalErrorKind, Value},
     error::Diagnostic,
-    function::{function_to_string, Function},
+    function::{user_function_to_string, Function},
     intrinsics,
     parsing::{
         ast::AstStmt,
@@ -99,7 +99,8 @@ pub fn mathema_parse(context: &mut Context, input: &str) -> Result<Outcome, Vec<
             }
         },
         AlgStmt::VarDecl(symbol, alg) => {
-            if intrinsics::CONSTANTS.contains_key(&symbol) {
+            // TODO: this ain't right, fix
+            if intrinsics::CONSTANTS.contains_key(symbol.as_str()) {
                 let (source, _) = algebra_to_string(&alg, &[]);
                 let span = Span { start: 0, end: symbol.as_str().len() };
                 let error = EvalError {
@@ -113,8 +114,9 @@ pub fn mathema_parse(context: &mut Context, input: &str) -> Result<Outcome, Vec<
             Ok(Outcome::Var(symbol))
         },
         AlgStmt::FnDecl(symbol, func) => {
-            if intrinsics::CONST_FNS.contains_key(&symbol) {
-                let (source, _) = function_to_string(symbol, &func, &[]);
+            // TODO: neither is this, FIX
+            if intrinsics::UNARY_FUNCS.contains_key(symbol.as_str()) || intrinsics::BINARY_FUNCS.contains_key(symbol.as_str()) {
+                let (source, _) = user_function_to_string(symbol, &func, &[]);
                 let span = Span { start: 0, end: symbol.as_str().len() };
                 let error = EvalError {
                     kind: EvalErrorKind::UndefinedVar(symbol),

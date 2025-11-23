@@ -365,7 +365,7 @@ pub fn eval_algebra(context: &Context, algebra: &AlgExpr) -> Result<MathemaValue
                 Value::Var(var) => {
                     if let Some(alg) = context.get_variable(*var) {
                         recurse(context, root, alg, errors)
-                    } else if let Some(c) = intrinsics::CONSTANTS.get(var) {
+                    } else if let Some(c) = intrinsics::CONSTANTS.get(var.as_str()) {
                         Some(c.clone())
                     } else {
                         let (source, span) = algebra_to_string(root, &[algebra]);
@@ -409,10 +409,6 @@ pub fn eval_algebra(context: &Context, algebra: &AlgExpr) -> Result<MathemaValue
                     .iter()
                     .map(|a| recurse(context, root, a, errors))
                     .collect::<Option<_>>()?;
-
-                if let Some(func) = intrinsics::CONST_FNS.get(&fc.name) {
-                    return Some((func)(&args))
-                };
 
                 match call_function(context, fc.name, &args) {
                     Ok(ans) => Some(ans),

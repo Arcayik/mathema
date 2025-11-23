@@ -31,7 +31,19 @@ define_constants! {
 
 pub struct UnaryFunc(fn(MathemaValue) -> MathemaValue);
 
+impl UnaryFunc {
+    pub fn call(&self, x: MathemaValue) -> MathemaValue {
+        (self.0)(x)
+    }
+}
+
 pub struct BinaryFunc(fn(MathemaValue, MathemaValue) -> MathemaValue);
+
+impl BinaryFunc {
+    pub fn call(&self, x: MathemaValue, y: MathemaValue) -> MathemaValue {
+        (self.0)(x, y)
+    }
+}
 
 fn declare_unary() -> HashMap<&'static str, UnaryFunc> {
     let mut hashmap = HashMap::new();
@@ -50,28 +62,46 @@ fn declare_binary() -> HashMap<&'static str, BinaryFunc> {
     hashmap
 }
 
+pub fn is_unary_func(name: &str) -> bool {
+    UNARY_FUNCS.contains_key(name)
+}
+
+pub fn is_binary_func(name: &str) -> bool {
+    BINARY_FUNCS.contains_key(name)
+}
+
+pub fn call_unary_func(name: &str, x: MathemaValue) -> MathemaValue {
+    let func = UNARY_FUNCS.get(name).unwrap();
+    func.call(x)
+}
+
+pub fn call_binary_func(name: &str, x: MathemaValue, y: MathemaValue) -> MathemaValue {
+    let func = BINARY_FUNCS.get(name).unwrap();
+    func.call(x, y)
+}
+
 mod functions {
     use crate::value::MathemaValue;
 
-    pub fn sin(value: MathemaValue) -> MathemaValue {
-        MathemaValue { inner: value.number().sin() }
+    pub fn sin(x: MathemaValue) -> MathemaValue {
+        MathemaValue { inner: x.number().sin() }
     }
 
-    pub fn cos(value: MathemaValue) -> MathemaValue {
-        MathemaValue { inner: value.number().cos() }
+    pub fn cos(x: MathemaValue) -> MathemaValue {
+        MathemaValue { inner: x.number().cos() }
     }
 
-    pub fn tan(value: MathemaValue) -> MathemaValue {
-        MathemaValue { inner: value.number().tan() }
+    pub fn tan(x: MathemaValue) -> MathemaValue {
+        MathemaValue { inner: x.number().tan() }
     }
 
-    pub fn log(value: MathemaValue, base: MathemaValue) -> MathemaValue {
-        let inner = value.number().log10() / base.number().log10();
+    pub fn log(x: MathemaValue, b: MathemaValue) -> MathemaValue {
+        let inner = x.number().log10() / b.number().log10();
         MathemaValue { inner }
     }
 
-    pub fn ln(value: MathemaValue) -> MathemaValue {
-        let inner = value.number().ln();
+    pub fn ln(x: MathemaValue) -> MathemaValue {
+        let inner = x.number().ln();
         MathemaValue { inner }
     }
 }

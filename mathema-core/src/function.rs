@@ -1,5 +1,10 @@
 use crate::{
-    algebra::{self, algebra_to_string, eval_algebra, AlgExpr, EvalError, EvalErrorKind}, context::{CallError, Context}, intrinsics, parsing::token::Span, symbol::Symbol, value::MathemaValue
+    algebra::{self, algebra_to_string, eval_algebra, AlgExpr, EvalError, EvalErrorKind},
+    context::{CallError, Context},
+    intrinsics::{self, call_binary_func, call_unary_func, is_binary_func, is_unary_func},
+    parsing::token::Span,
+    symbol::Symbol,
+    value::MathemaValue
 };
 
 #[derive(Debug)]
@@ -108,7 +113,7 @@ fn eval_user_function(context: &Context, function: &Function, input: &[MathemaVa
                         eval_algebra(context, expr)
                             .map_err(|mut e| errors.append(&mut e))
                             .ok()
-                    } else if let Some(c) = intrinsics::CONSTANTS.get(var) {
+                    } else if let Some(c) = intrinsics::CONSTANTS.get(var.as_str()) {
                         Some(c.clone())
                     } else {
                         let (source, span) = algebra_to_string(&function.body, &[algebra]);
@@ -156,8 +161,7 @@ fn eval_user_function(context: &Context, function: &Function, input: &[MathemaVa
                 match call_function(context, fc.name, &args) {
                     Ok(ans) => Some(ans),
                     Err(e) => {
-                        // TODO: if the function is intrinsic, what does the body look like?
-                        let (source, span) = algebra_to_string(algebra, &[]);
+                        let (source, span) = algebra_to_string(&function.body, &[algebra]);
                         let error = EvalError {
                             kind: EvalErrorKind::BadFnCall(e),
                             source: source.into(),
@@ -181,7 +185,7 @@ fn eval_user_function(context: &Context, function: &Function, input: &[MathemaVa
     result.ok_or(CallError::Eval(errors))
 }
 
-pub fn function_to_string(name: Symbol, function: &Function, take_span: &[&AlgExpr]) -> (String, Vec<Span>) {
+pub fn user_function_to_string(name: Symbol, function: &Function, take_span: &[&AlgExpr]) -> (String, Vec<Span>) {
     let mut string = format!("{} = ", name);
     let span_offset = name.as_str().len() + 3;
 
@@ -197,8 +201,10 @@ pub fn function_to_string(name: Symbol, function: &Function, take_span: &[&AlgEx
 pub fn call_function(context: &Context, name: Symbol, input: &[MathemaValue]) -> Result<MathemaValue, CallError> {
     if let Some(func) = context.get_function(name) {
         eval_user_function(context, func, input)
-    } else if let Some(func) = intrinsics::CONST_FNS.get(&name) {
-        Ok((func)(input))
+    } else if is_unary_func(name.as_str()) && input.len() == 1 {
+        Ok(call_unary_func(name.as_str(), input[0].clone()))
+    } else if is_binary_func(name.as_str()) && input.len() == 2 {
+        Ok(call_binary_func(name.as_str(), input[0].clone(), input[1].clone()))
     } else {
         Err(CallError::NotDefined(name))
     }

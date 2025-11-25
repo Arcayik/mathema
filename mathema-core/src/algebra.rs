@@ -1,10 +1,10 @@
-use std::rc::Rc;
+use std::collections::HashMap;
 
 use crate::{
     context::{CallError, Context}, error::Diagnostic, float, function::{call_function, FnArgs, Function}, intrinsics, parsing::{
         ast::{AstBinary, AstExpr, AstFnCall, AstGroup, AstStmt, AstUnary, AstValue, AstVisit, BinOp, Precedence, UnaryOp},
         token::Span
-    }, symbol::Symbol, value::MathemaValue
+    }, snippet::SnippetLine, symbol::Symbol, value::MathemaValue
 };
 
 pub enum AlgStmt {
@@ -17,15 +17,18 @@ impl std::fmt::Display for AlgStmt {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             AlgStmt::Expr(alg) => {
-                let (body, _) = algebra_to_string(alg, &[]);
+                let snip = algebra_to_string(alg);
+                let body = snip.source();
                 write!(f, "{}", body)
             },
             AlgStmt::VarDecl(var, alg) => {
-                let (body, _) = algebra_to_string(alg, &[]);
+                let snip = algebra_to_string(alg);
+                let body = snip.source();
                 write!(f, "{} = {}", var.as_str(), body)
             },
             AlgStmt::FnDecl(name, func) => {
-                let (body, _) = algebra_to_string(&func.body, &[]);
+                let snip = algebra_to_string(&func.body);
+                let body = snip.source();
                 let args = func.args.get_args()
                     .iter()
                     .map(|a| a.as_str())
@@ -322,7 +325,7 @@ pub enum EvalErrorKind {
 #[derive(Debug)]
 pub struct EvalError {
     pub kind: EvalErrorKind,
-    pub(crate) source: Rc<str>,
+    pub(crate) source: String,
     pub(crate) span: Span
 }
 
@@ -368,11 +371,13 @@ pub fn eval_algebra(context: &Context, algebra: &AlgExpr) -> Result<MathemaValue
                     } else if let Some(c) = intrinsics::CONSTANTS.get(var.as_str()) {
                         Some(c.clone())
                     } else {
-                        let (source, span) = algebra_to_string(root, &[algebra]);
+                        let snippet = algebra_to_string(root);
+                        let source = snippet.source();
+                        let span = snippet.get_span(algebra).unwrap();
                         let error = EvalError {
                             kind: EvalErrorKind::UndefinedVar(*var),
                             source: source.into(),
-                            span: span[0]
+                            span,
                         };
                         errors.push(error);
                         None
@@ -413,12 +418,13 @@ pub fn eval_algebra(context: &Context, algebra: &AlgExpr) -> Result<MathemaValue
                 match call_function(context, fc.name, &args) {
                     Ok(ans) => Some(ans),
                     Err(e) => {
-                        // TODO: if the function is intrinsic, what does the body look like?
-                        let (source, span) = algebra_to_string(root, &[algebra]);
+                        let snippet = algebra_to_string(root);
+                        let source = snippet.source();
+                        let span = snippet.get_span(algebra).unwrap();
                         let error = EvalError {
                             kind: EvalErrorKind::BadFnCall(e),
                             source: source.into(),
-                            span: span[0]
+                            span,
                         };
                         errors.push(error);
                         None
@@ -437,23 +443,24 @@ pub fn eval_algebra(context: &Context, algebra: &AlgExpr) -> Result<MathemaValue
     }
 }
 
-pub fn algebra_to_string(algebra: &AlgExpr, take_span: &[&AlgExpr]) -> (String, Vec<Span>) {
+pub fn algebra_to_string(algebra: &AlgExpr) -> SnippetLine {
     fn recurse(
         algebra: &AlgExpr,
-        take_span: &[&AlgExpr],
         string: &mut String,
-        spans: &mut Vec<Span>
+        spans: &mut HashMap<*const AlgExpr, Span>,
+        mut end: usize,
     ) {
-        let old_end = string.len();
         match algebra {
             AlgExpr::Value(val) => match val {
                 Value::Num(num) => string.push_str(&num.to_string()),
                 Value::Var(var) => string.push_str(var.as_str()),
             },
             AlgExpr::Unary(un) => {
-                string.push_str(&un.op.to_string());
+                let op_str = &un.op.to_string();
+                end += op_str.len();
+                string.push_str(op_str);
                 let mut sub_str = String::new();
-                recurse(&un.expr, take_span, &mut sub_str, spans);
+                recurse(&un.expr, &mut sub_str, spans, end);
                 if !matches!(*un.expr, AlgExpr::Value(_)) {
                     string.push_str(&format!("({})", sub_str));
                 } else {
@@ -463,11 +470,14 @@ pub fn algebra_to_string(algebra: &AlgExpr, take_span: &[&AlgExpr]) -> (String, 
             AlgExpr::Binary(bin) => {
                 {
                     let mut left_str = String::new();
-                    recurse(&bin.left, take_span, &mut left_str, spans);
+                    recurse(&bin.left, &mut left_str, spans, end);
+                    end += left_str.len();
+
                     if Precedence::of_alg(&bin.left) < Precedence::of_alg_binop(&bin.op) {
                         string.push_str(&format!("({})", left_str));
+                        end += 2;
                     } else {
-                        string.push_str(&left_str)
+                        string.push_str(&left_str);
                     }
                 }
 
@@ -476,13 +486,18 @@ pub fn algebra_to_string(algebra: &AlgExpr, take_span: &[&AlgExpr]) -> (String, 
                     && matches!(*bin.right, AlgExpr::Value(Value::Var(_)) | AlgExpr::FnCall(_)) {
                         // implicit multiplication, print nothing
                 } else {
-                    string.push_str(&format!(" {} ", bin.op));
+                    let op_str = &format!(" {} ", bin.op);
+                    end += op_str.len();
+                    string.push_str(op_str);
                 }
 
                 let mut right_str = String::new();
-                recurse(&bin.right, take_span, &mut right_str, spans);
+                recurse(&bin.right, &mut right_str, spans, end);
+                end += right_str.len();
+
                 if Precedence::of_alg(&bin.right) < Precedence::of_alg_binop(&bin.op) {
                     string.push_str(&format!("({})", right_str));
+                    end += 2;
                 } else {
                     string.push_str(&right_str)
                 }
@@ -494,7 +509,7 @@ pub fn algebra_to_string(algebra: &AlgExpr, take_span: &[&AlgExpr]) -> (String, 
                 let mut arg_strings: Vec<String> = Vec::new();
                 for arg in &fc.args {
                     let mut arg_str = String::new();
-                    recurse(arg, take_span, &mut arg_str, spans);
+                    recurse(arg, &mut arg_str, spans, end);
                     arg_strings.push(arg_str);
                 }
                 string.push_str(&arg_strings.join(", "));
@@ -502,19 +517,18 @@ pub fn algebra_to_string(algebra: &AlgExpr, take_span: &[&AlgExpr]) -> (String, 
             }
         };
 
-        if take_span.iter().any(|t| core::ptr::eq(algebra, *t)) {
-            let span = Span {
-                start: old_end,
-                end: string.len(),
-            };
-            spans.push(span);
-        }
+        let ptr: *const AlgExpr = algebra;
+        let span = Span {
+            start: end,
+            end: end + string.len(),
+        };
+        spans.insert(ptr, span);
     }
 
     let mut string = String::new();
-    let mut spans = Vec::new();
+    let mut span_map = HashMap::new();
 
-    recurse(algebra, take_span, &mut string, &mut spans);
+    recurse(algebra, &mut string, &mut span_map, 0);
 
-    (string, spans)
+    SnippetLine { source: string, span_map }
 }

@@ -2,6 +2,7 @@ pub mod algebra;
 pub mod context;
 pub mod intrinsics;
 pub mod function;
+pub mod snippet;
 pub mod symbol;
 pub mod value;
 pub mod error;
@@ -32,7 +33,7 @@ mod tests {
 
     fn alg_str(input: &'static str) -> String {
         let alg = parse(input);
-        algebra_to_string(&alg, &[]).0
+        algebra_to_string(&alg).source
     }
 
     #[test]

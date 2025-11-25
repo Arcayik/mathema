@@ -2,7 +2,7 @@ use crate::{
     algebra::{self, algebra_to_string, eval_algebra, AlgExpr, EvalError, EvalErrorKind},
     context::{CallError, Context},
     intrinsics::{self, call_binary_func, call_unary_func, is_binary_func, is_unary_func},
-    parsing::token::Span,
+    snippet::SnippetLine,
     symbol::Symbol,
     value::MathemaValue
 };
@@ -26,6 +26,13 @@ impl Function {
 
 #[derive(Clone, Debug)]
 pub struct FnArgs(Vec<Symbol>);
+
+impl std::fmt::Display for FnArgs {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let str = self.0.join(", ");
+        write!(f, "{}", str)
+    }
+}
 
 impl FnArgs {
     pub fn empty() -> Self {
@@ -116,11 +123,13 @@ fn eval_user_function(context: &Context, function: &Function, input: &[MathemaVa
                     } else if let Some(c) = intrinsics::CONSTANTS.get(var.as_str()) {
                         Some(c.clone())
                     } else {
-                        let (source, span) = algebra_to_string(&function.body, &[algebra]);
+                        let snip = algebra_to_string(&function.body);
+                        let source = snip.source();
+                        let span = snip.get_span(algebra).unwrap();
                         let error = EvalError {
                             kind: EvalErrorKind::UndefinedVar(*var),
                             source: source.into(),
-                            span: span[0],
+                            span,
                         };
                         errors.push(error);
                         None
@@ -161,11 +170,13 @@ fn eval_user_function(context: &Context, function: &Function, input: &[MathemaVa
                 match call_function(context, fc.name, &args) {
                     Ok(ans) => Some(ans),
                     Err(e) => {
-                        let (source, span) = algebra_to_string(&function.body, &[algebra]);
+                        let snip = algebra_to_string(&function.body);
+                        let source = snip.source();
+                        let span = snip.get_span(algebra).unwrap();
                         let error = EvalError {
                             kind: EvalErrorKind::BadFnCall(e),
                             source: source.into(),
-                            span: span[0]
+                            span,
                         };
                         errors.push(error);
                         None
@@ -185,17 +196,21 @@ fn eval_user_function(context: &Context, function: &Function, input: &[MathemaVa
     result.ok_or(CallError::Eval(errors))
 }
 
-pub fn user_function_to_string(name: Symbol, function: &Function, take_span: &[&AlgExpr]) -> (String, Vec<Span>) {
+pub fn user_function_to_string(name: Symbol, function: &Function) -> SnippetLine {
     let mut string = format!("{} = ", name);
     let span_offset = name.as_str().len() + 3;
 
-    let (body, mut spans) = algebra_to_string(&function.body, take_span);
-    string.push_str(&body);
-    for span in spans.iter_mut() {
+    let mut snip = algebra_to_string(&function.body);
+    let body = snip.source();
+    string.push_str(body);
+
+    for span in snip.spans_mut() {
         span.start += span_offset;
         span.end += span_offset;
     }
-    (string, spans)
+
+    snip.source = string;
+    snip
 }
 
 pub fn call_function(context: &Context, name: Symbol, input: &[MathemaValue]) -> Result<MathemaValue, CallError> {

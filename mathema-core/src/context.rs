@@ -101,7 +101,8 @@ pub fn mathema_parse(context: &mut Context, input: &str) -> Result<Outcome, Vec<
         AlgStmt::VarDecl(symbol, alg) => {
             // TODO: this ain't right, fix
             if intrinsics::CONSTANTS.contains_key(symbol.as_str()) {
-                let (source, _) = algebra_to_string(&alg, &[]);
+                let snip = algebra_to_string(&alg);
+                let source = snip.source();
                 let span = Span { start: 0, end: symbol.as_str().len() };
                 let error = EvalError {
                     kind: EvalErrorKind::UndefinedVar(symbol),
@@ -116,7 +117,8 @@ pub fn mathema_parse(context: &mut Context, input: &str) -> Result<Outcome, Vec<
         AlgStmt::FnDecl(symbol, func) => {
             // TODO: neither is this, FIX
             if intrinsics::UNARY_FUNCS.contains_key(symbol.as_str()) || intrinsics::BINARY_FUNCS.contains_key(symbol.as_str()) {
-                let (source, _) = user_function_to_string(symbol, &func, &[]);
+                let snip = user_function_to_string(symbol, &func);
+                let source = snip.source();
                 let span = Span { start: 0, end: symbol.as_str().len() };
                 let error = EvalError {
                     kind: EvalErrorKind::UndefinedVar(symbol),

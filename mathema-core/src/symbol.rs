@@ -1,4 +1,4 @@
-use std::{collections::HashMap, sync::{LazyLock, Mutex}};
+use std::{borrow::Borrow, collections::HashMap, sync::{LazyLock, Mutex}};
 
 #[derive(Copy, Clone, Debug, Eq, PartialEq, Hash)]
 struct SymbolId(u32);
@@ -9,6 +9,12 @@ pub struct Symbol(SymbolId);
 impl std::fmt::Display for Symbol {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "{}", self.as_str())
+    }
+}
+
+impl Borrow<str> for Symbol {
+    fn borrow(&self) -> &str {
+        self.as_str()
     }
 }
 

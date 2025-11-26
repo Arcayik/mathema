@@ -1,10 +1,5 @@
 use crate::{
-    algebra::{self, algebra_to_string, eval_algebra, AlgExpr, EvalError, EvalErrorKind},
-    context::{CallError, Context},
-    intrinsics::{self, call_binary_func, call_unary_func, is_binary_func, is_unary_func},
-    snippet::SnippetLine,
-    symbol::Symbol,
-    value::MathemaValue
+    algebra::{self, eval_algebra, AlgExpr, EvalError, EvalErrorKind}, context::{CallError, Context}, intrinsics::{self, call_binary_func, call_unary_func, is_binary_func, is_unary_func}, snippet::create_algebra_snippet, symbol::Symbol, value::MathemaValue
 };
 
 #[derive(Debug)]
@@ -123,7 +118,7 @@ fn eval_user_function(context: &Context, function: &Function, input: &[MathemaVa
                     } else if let Some(c) = intrinsics::CONSTANTS.get(var.as_str()) {
                         Some(c.clone())
                     } else {
-                        let snip = algebra_to_string(&function.body);
+                        let snip = create_algebra_snippet(&function.body);
                         let source = snip.source();
                         let span = snip.get_span(algebra).unwrap();
                         let error = EvalError {
@@ -170,7 +165,7 @@ fn eval_user_function(context: &Context, function: &Function, input: &[MathemaVa
                 match call_function(context, fc.name, &args) {
                     Ok(ans) => Some(ans),
                     Err(e) => {
-                        let snip = algebra_to_string(&function.body);
+                        let snip = create_algebra_snippet(&function.body);
                         let source = snip.source();
                         let span = snip.get_span(algebra).unwrap();
                         let error = EvalError {
@@ -194,23 +189,6 @@ fn eval_user_function(context: &Context, function: &Function, input: &[MathemaVa
     let mut errors = Vec::new();
     let result = recurse(context, function, input, &function.body, &mut errors);
     result.ok_or(CallError::Eval(errors))
-}
-
-pub fn user_function_to_string(name: Symbol, function: &Function) -> SnippetLine {
-    let mut string = format!("{} = ", name);
-    let span_offset = name.as_str().len() + 3;
-
-    let mut snip = algebra_to_string(&function.body);
-    let body = snip.source();
-    string.push_str(body);
-
-    for span in snip.spans_mut() {
-        span.start += span_offset;
-        span.end += span_offset;
-    }
-
-    snip.source = string;
-    snip
 }
 
 pub fn call_function(context: &Context, name: Symbol, input: &[MathemaValue]) -> Result<MathemaValue, CallError> {

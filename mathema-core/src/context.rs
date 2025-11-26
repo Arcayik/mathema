@@ -1,16 +1,18 @@
 use std::collections::HashMap;
 
 use crate::{
-    algebra::{algebra_to_string, eval_algebra, AlgExpr, AlgStmt, EvalError, EvalErrorKind, Value},
+    algebra::{eval_algebra, AlgExpr, AlgStmt, EvalError, EvalErrorKind, Value},
     error::Diagnostic,
-    function::{user_function_to_string, Function},
+    function::Function,
+    snippet::{create_algebra_snippet, create_function_snippet},
     intrinsics,
     parsing::{
         ast::AstStmt,
         lexer::tokenize,
         parser::ParseBuffer, token::Span,
     },
-    symbol::Symbol, value::MathemaValue
+    symbol::Symbol,
+    value::MathemaValue,
 };
 
 #[derive(Default)]
@@ -56,6 +58,7 @@ impl std::fmt::Display for CallError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Self::BadArgs(_off) => write!(f, "wrong number of arguments"),
+            // TODO: show function or var decl source
             Self::Eval(e) => write!(f, "eval errors: {e:?}"),
             Self::NotDefined(name) => write!(f, "function '{}' not defined", name),
         }
@@ -101,7 +104,7 @@ pub fn mathema_parse(context: &mut Context, input: &str) -> Result<Outcome, Vec<
         AlgStmt::VarDecl(symbol, alg) => {
             // TODO: this ain't right, fix
             if intrinsics::CONSTANTS.contains_key(symbol.as_str()) {
-                let snip = algebra_to_string(&alg);
+                let snip = create_algebra_snippet(&alg);
                 let source = snip.source();
                 let span = Span { start: 0, end: symbol.as_str().len() };
                 let error = EvalError {
@@ -117,7 +120,7 @@ pub fn mathema_parse(context: &mut Context, input: &str) -> Result<Outcome, Vec<
         AlgStmt::FnDecl(symbol, func) => {
             // TODO: neither is this, FIX
             if intrinsics::UNARY_FUNCS.contains_key(symbol.as_str()) || intrinsics::BINARY_FUNCS.contains_key(symbol.as_str()) {
-                let snip = user_function_to_string(symbol, &func);
+                let snip = create_function_snippet(symbol, &func);
                 let source = snip.source();
                 let span = Span { start: 0, end: symbol.as_str().len() };
                 let error = EvalError {

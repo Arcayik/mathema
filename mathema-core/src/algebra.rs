@@ -1,10 +1,15 @@
-use std::collections::HashMap;
-
 use crate::{
-    context::{CallError, Context}, error::Diagnostic, float, function::{call_function, FnArgs, Function}, intrinsics, parsing::{
-        ast::{AstBinary, AstExpr, AstFnCall, AstGroup, AstStmt, AstUnary, AstValue, AstVisit, BinOp, Precedence, UnaryOp},
+    context::{CallError, Context},
+    error::Diagnostic,
+    float,
+    function::{call_function, FnArgs, Function},
+    intrinsics, parsing::{
+        ast::{AstBinary, AstExpr, AstFnCall, AstGroup, AstStmt, AstUnary, AstValue, AstVisit, BinOp, UnaryOp},
         token::Span
-    }, snippet::SnippetLine, symbol::Symbol, value::MathemaValue
+    },
+    snippet::create_algebra_snippet,
+    symbol::Symbol,
+    value::MathemaValue
 };
 
 pub enum AlgStmt {
@@ -17,17 +22,17 @@ impl std::fmt::Display for AlgStmt {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             AlgStmt::Expr(alg) => {
-                let snip = algebra_to_string(alg);
+                let snip = create_algebra_snippet(alg);
                 let body = snip.source();
                 write!(f, "{}", body)
             },
             AlgStmt::VarDecl(var, alg) => {
-                let snip = algebra_to_string(alg);
+                let snip = create_algebra_snippet(alg);
                 let body = snip.source();
                 write!(f, "{} = {}", var.as_str(), body)
             },
             AlgStmt::FnDecl(name, func) => {
-                let snip = algebra_to_string(&func.body);
+                let snip = create_algebra_snippet(&func.body);
                 let body = snip.source();
                 let args = func.args.get_args()
                     .iter()
@@ -371,7 +376,7 @@ pub fn eval_algebra(context: &Context, algebra: &AlgExpr) -> Result<MathemaValue
                     } else if let Some(c) = intrinsics::CONSTANTS.get(var.as_str()) {
                         Some(c.clone())
                     } else {
-                        let snippet = algebra_to_string(root);
+                        let snippet = create_algebra_snippet(root);
                         let source = snippet.source();
                         let span = snippet.get_span(algebra).unwrap();
                         let error = EvalError {
@@ -418,7 +423,7 @@ pub fn eval_algebra(context: &Context, algebra: &AlgExpr) -> Result<MathemaValue
                 match call_function(context, fc.name, &args) {
                     Ok(ans) => Some(ans),
                     Err(e) => {
-                        let snippet = algebra_to_string(root);
+                        let snippet = create_algebra_snippet(root);
                         let source = snippet.source();
                         let span = snippet.get_span(algebra).unwrap();
                         let error = EvalError {
@@ -443,92 +448,3 @@ pub fn eval_algebra(context: &Context, algebra: &AlgExpr) -> Result<MathemaValue
     }
 }
 
-pub fn algebra_to_string(algebra: &AlgExpr) -> SnippetLine {
-    fn recurse(
-        algebra: &AlgExpr,
-        string: &mut String,
-        spans: &mut HashMap<*const AlgExpr, Span>,
-        mut end: usize,
-    ) {
-        match algebra {
-            AlgExpr::Value(val) => match val {
-                Value::Num(num) => string.push_str(&num.to_string()),
-                Value::Var(var) => string.push_str(var.as_str()),
-            },
-            AlgExpr::Unary(un) => {
-                let op_str = &un.op.to_string();
-                end += op_str.len();
-                string.push_str(op_str);
-                let mut sub_str = String::new();
-                recurse(&un.expr, &mut sub_str, spans, end);
-                if !matches!(*un.expr, AlgExpr::Value(_)) {
-                    string.push_str(&format!("({})", sub_str));
-                } else {
-                    string.push_str(&sub_str)
-                }
-            },
-            AlgExpr::Binary(bin) => {
-                {
-                    let mut left_str = String::new();
-                    recurse(&bin.left, &mut left_str, spans, end);
-                    end += left_str.len();
-
-                    if Precedence::of_alg(&bin.left) < Precedence::of_alg_binop(&bin.op) {
-                        string.push_str(&format!("({})", left_str));
-                        end += 2;
-                    } else {
-                        string.push_str(&left_str);
-                    }
-                }
-
-                if matches!(bin.op, AlgBinOp::Mul)
-                    && matches!(*bin.left, AlgExpr::Value(Value::Num(_)))
-                    && matches!(*bin.right, AlgExpr::Value(Value::Var(_)) | AlgExpr::FnCall(_)) {
-                        // implicit multiplication, print nothing
-                } else {
-                    let op_str = &format!(" {} ", bin.op);
-                    end += op_str.len();
-                    string.push_str(op_str);
-                }
-
-                let mut right_str = String::new();
-                recurse(&bin.right, &mut right_str, spans, end);
-                end += right_str.len();
-
-                if Precedence::of_alg(&bin.right) < Precedence::of_alg_binop(&bin.op) {
-                    string.push_str(&format!("({})", right_str));
-                    end += 2;
-                } else {
-                    string.push_str(&right_str)
-                }
-            },
-            AlgExpr::FnCall(fc) => {
-                string.push_str(fc.name.as_str());
-                string.push('(');
-
-                let mut arg_strings: Vec<String> = Vec::new();
-                for arg in &fc.args {
-                    let mut arg_str = String::new();
-                    recurse(arg, &mut arg_str, spans, end);
-                    arg_strings.push(arg_str);
-                }
-                string.push_str(&arg_strings.join(", "));
-                string.push(')');
-            }
-        };
-
-        let ptr: *const AlgExpr = algebra;
-        let span = Span {
-            start: end,
-            end: end + string.len(),
-        };
-        spans.insert(ptr, span);
-    }
-
-    let mut string = String::new();
-    let mut span_map = HashMap::new();
-
-    recurse(algebra, &mut string, &mut span_map, 0);
-
-    SnippetLine { source: string, span_map }
-}

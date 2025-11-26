@@ -49,17 +49,23 @@ impl Context {
 
 #[derive(Debug)]
 pub enum CallError {
-    BadArgs(isize),
-    Eval(Vec<EvalError>),
+    BadArgs(Symbol, isize),
+    Eval {
+        name: Symbol,
+        origin: Box<str>,
+        errors: Vec<EvalError>
+    },
     NotDefined(Symbol)
 }
 
 impl std::fmt::Display for CallError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Self::BadArgs(_off) => write!(f, "wrong number of arguments"),
+            Self::BadArgs(_func, _off) => write!(f, "wrong number of arguments"),
             // TODO: show function or var decl source
-            Self::Eval(e) => write!(f, "eval errors: {e:?}"),
+            Self::Eval { name, origin, errors } => {
+                write!(f, "{origin}")
+            },
             Self::NotDefined(name) => write!(f, "function '{}' not defined", name),
         }
     }
@@ -117,21 +123,22 @@ pub fn mathema_parse(context: &mut Context, input: &str) -> Result<Outcome, Vec<
             context.set_variable(symbol, alg);
             Ok(Outcome::Var(symbol))
         },
-        AlgStmt::FnDecl(symbol, func) => {
+        AlgStmt::FnDecl(func) => {
+            let name = func.name;
             // TODO: neither is this, FIX
-            if intrinsics::UNARY_FUNCS.contains_key(symbol.as_str()) || intrinsics::BINARY_FUNCS.contains_key(symbol.as_str()) {
-                let snip = create_function_snippet(symbol, &func);
+            if intrinsics::UNARY_FUNCS.contains_key(name.as_str()) || intrinsics::BINARY_FUNCS.contains_key(name.as_str()) {
+                let snip = create_function_snippet(&func);
                 let source = snip.source();
-                let span = Span { start: 0, end: symbol.as_str().len() };
+                let span = Span { start: 0, end: name.as_str().len() };
                 let error = EvalError {
-                    kind: EvalErrorKind::UndefinedVar(symbol),
+                    kind: EvalErrorKind::UndefinedVar(name),
                     source: source.into(),
                     span
                 };
                 return Err(vec![Box::new(error) as Box<dyn Diagnostic>])
             }
-            context.set_function(symbol, func);
-            Ok(Outcome::Fn(symbol))
+            context.set_function(name, func);
+            Ok(Outcome::Fn(name))
         }
     }
 }

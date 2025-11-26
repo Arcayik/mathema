@@ -1,17 +1,18 @@
 use crate::{
-    algebra::{self, eval_algebra, AlgExpr, EvalError, EvalErrorKind}, context::{CallError, Context}, intrinsics::{self, call_binary_func, call_unary_func, is_binary_func, is_unary_func}, snippet::create_algebra_snippet, symbol::Symbol, value::MathemaValue
+    algebra::{self, eval_algebra, AlgExpr, EvalError, EvalErrorKind}, context::{CallError, Context}, intrinsics::{self, call_binary_func, call_unary_func, is_binary_func, is_unary_func}, snippet::{create_algebra_snippet, create_function_snippet}, symbol::Symbol, value::MathemaValue
 };
 
 #[derive(Debug)]
 pub struct Function {
+    pub(crate) name: Symbol,
     pub(crate) args: FnArgs,
     pub(crate) body: Box<AlgExpr>,
 }
 
 impl Function {
-    pub fn new(algebra: AlgExpr, args: FnArgs) -> Self {
+    pub fn new(name: Symbol, algebra: AlgExpr, args: FnArgs) -> Self {
         let body = Box::new(algebra);
-        Function { args, body }
+        Function { name, args, body }
     }
 
     pub fn num_params(&self) -> usize {
@@ -181,14 +182,19 @@ fn eval_user_function(context: &Context, function: &Function, input: &[MathemaVa
         }
     }
 
+    let name = function.name;
+
     let args_off = input.len() as isize - function.args.len() as isize;
     if args_off != 0 {
-        return Err(CallError::BadArgs(args_off))
+        return Err(CallError::BadArgs(name, args_off))
     }
 
+    let origin = create_function_snippet(&function).source().into();
+    dbg!(&origin);
+     
     let mut errors = Vec::new();
     let result = recurse(context, function, input, &function.body, &mut errors);
-    result.ok_or(CallError::Eval(errors))
+    result.ok_or(CallError::Eval { name, origin, errors })
 }
 
 pub fn call_function(context: &Context, name: Symbol, input: &[MathemaValue]) -> Result<MathemaValue, CallError> {

@@ -15,7 +15,7 @@ use crate::{
 pub enum AlgStmt {
     Expr(AlgExpr),
     VarDecl(Symbol, AlgExpr),
-    FnDecl(Symbol, Function),
+    FnDecl(Function),
 }
 
 impl std::fmt::Display for AlgStmt {
@@ -31,7 +31,7 @@ impl std::fmt::Display for AlgStmt {
                 let body = snip.source();
                 write!(f, "{} = {}", var.as_str(), body)
             },
-            AlgStmt::FnDecl(name, func) => {
+            AlgStmt::FnDecl(func) => {
                 let snip = create_algebra_snippet(&func.body);
                 let body = snip.source();
                 let args = func.args.get_args()
@@ -39,7 +39,7 @@ impl std::fmt::Display for AlgStmt {
                     .map(|a| a.as_str())
                     .collect::<Vec<_>>()
                     .join(", ");
-                write!(f, "{}({}) = {}", name, args, body)
+                write!(f, "{}({}) = {}", func.name, args, body)
             }
         }
     }
@@ -67,8 +67,8 @@ impl AlgStmt {
                     .collect();
                 let args = FnArgs::from_vec(arg_vec);
 
-                let func = Function::new(alg, args);
-                AlgStmt::FnDecl(name, func)
+                let func = Function::new(name, alg, args);
+                AlgStmt::FnDecl(func)
             }
         }
     }

@@ -140,9 +140,10 @@ pub fn create_var_decl_snippet(name: Symbol, decl: &AlgExpr) -> SnippetLine {
     snip
 }
 
-pub fn create_function_snippet(name: Symbol, function: &Function) -> SnippetLine {
-    let mut string = format!("{} = ", name);
-    let span_offset = name.as_str().len() + 3;
+pub fn create_function_snippet(function: &Function) -> SnippetLine {
+    let args = function.args.to_string();
+    let mut string = format!("{}({}) = ", function.name, args);
+    let span_offset = function.name.as_str().len() + args.len() + 5;
 
     let mut snip = create_algebra_snippet(&function.body);
     let body = snip.source();

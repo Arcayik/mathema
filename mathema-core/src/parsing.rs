@@ -13,7 +13,8 @@ mod tests {
             lexer::tokenize,
             parser::{ParseBuffer, ParseError},
             token::{Caret, Delimiter, Ident, Literal, Minus, Plus, Span, Spanned, Star}
-        }, symbol::Symbol
+        },
+        symbol::Symbol
     };
 
     fn parse(input: &str) -> Result<AstExpr, ParseError> {

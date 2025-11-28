@@ -1,18 +1,11 @@
 use std::collections::HashMap;
 
 use crate::{
-    algebra::{eval_algebra, AlgExpr, AlgStmt, EvalError, EvalErrorKind, Value},
-    error::Diagnostic,
-    function::Function,
-    snippet::{create_algebra_snippet, create_function_snippet},
-    intrinsics,
-    parsing::{
+    algebra::{eval_algebra, AlgExpr, AlgStmt, EvalError, Value}, error::MathemaError, function::Function, intrinsics, parsing::{
         ast::AstStmt,
         lexer::tokenize,
         parser::ParseBuffer, token::Span,
-    },
-    symbol::Symbol,
-    value::MathemaValue,
+    }, snippet::{create_algebra_snippet, create_function_snippet}, symbol::Symbol, value::MathemaValue
 };
 
 #[derive(Default)]
@@ -48,7 +41,20 @@ impl Context {
 }
 
 #[derive(Debug)]
-pub enum CallError {
+pub struct DefError {
+    pub kind: DefErrorKind,
+    pub name: Symbol,
+    pub span: Span
+}
+
+#[derive(Debug)]
+pub enum DefErrorKind {
+    ReservedVar(Symbol),
+    ReservedFunc(Symbol)
+}
+
+#[derive(Debug)]
+pub enum FuncError {
     BadArgs(Symbol, isize),
     Eval {
         name: Symbol,
@@ -58,17 +64,14 @@ pub enum CallError {
     NotDefined(Symbol)
 }
 
-impl std::fmt::Display for CallError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Self::BadArgs(_func, _off) => write!(f, "wrong number of arguments"),
-            // TODO: show function or var decl source
-            Self::Eval { name, origin, errors } => {
-                write!(f, "{origin}")
-            },
-            Self::NotDefined(name) => write!(f, "function '{}' not defined", name),
-        }
-    }
+#[derive(Debug)]
+pub enum VarError {
+    Eval {
+        name: Symbol,
+        origin: Box<str>,
+        errors: Vec<EvalError>
+    },
+    NotDefined(Symbol)
 }
 
 pub enum Outcome {
@@ -77,19 +80,15 @@ pub enum Outcome {
     Fn(Symbol)
 }
 
-pub fn mathema_parse(context: &mut Context, input: &str) -> Result<Outcome, Vec<Box<dyn Diagnostic>>> {
+pub fn mathema_parse(context: &mut Context, input: &str) -> Result<Outcome, MathemaError> {
     let (buffer, errors) = tokenize(input);
     if !errors.is_empty() {
-        let err: Vec<Box<dyn Diagnostic>> = errors
-            .into_iter()
-            .map(|e| Box::new(e) as Box<dyn Diagnostic>)
-            .collect();
-        return Err(err);
+        return Err(MathemaError::Lexer(errors))
     }
 
     let parsebuffer = ParseBuffer::new(buffer);
     let stmt = parsebuffer.parse::<AstStmt>()
-        .map_err(|e| vec![Box::new(e) as Box<dyn Diagnostic>])?;
+        .map_err(|e| MathemaError::Parser(e))?;
 
     let alg_stmt = AlgStmt::from_expr_stmt(&stmt);
     match alg_stmt {
@@ -100,42 +99,32 @@ pub fn mathema_parse(context: &mut Context, input: &str) -> Result<Outcome, Vec<
                     Ok(Outcome::Answer(ans))
                 },
                 Err(e) => {
-                    let diags = e.into_iter()
-                        .map(|e| Box::new(e) as Box<dyn Diagnostic>)
-                        .collect();
-                    Err(diags)
+                    Err(MathemaError::Eval(e))
                 }
             }
         },
-        AlgStmt::VarDecl(symbol, alg) => {
-            // TODO: this ain't right, fix
-            if intrinsics::CONSTANTS.contains_key(symbol.as_str()) {
+        AlgStmt::VarDecl(name, alg) => {
+            if intrinsics::CONSTANTS.contains_key(name.as_str()) {
                 let snip = create_algebra_snippet(&alg);
-                let source = snip.source();
-                let span = Span { start: 0, end: symbol.as_str().len() };
-                let error = EvalError {
-                    kind: EvalErrorKind::UndefinedVar(symbol),
-                    source: source.into(),
-                    span
-                };
-                return Err(vec![Box::new(error) as Box<dyn Diagnostic>])
+                let _source = snip.source();
+                let span = Span { start: 0, end: name.as_str().len() };
+                let kind = DefErrorKind::ReservedVar(name);
+                let error = DefError { kind, name, span };
+                return Err(MathemaError::Definition(error))
             }
-            context.set_variable(symbol, alg);
-            Ok(Outcome::Var(symbol))
+            context.set_variable(name, alg);
+            Ok(Outcome::Var(name))
         },
         AlgStmt::FnDecl(func) => {
             let name = func.name;
-            // TODO: neither is this, FIX
             if intrinsics::UNARY_FUNCS.contains_key(name.as_str()) || intrinsics::BINARY_FUNCS.contains_key(name.as_str()) {
                 let snip = create_function_snippet(&func);
-                let source = snip.source();
+                // TODO: incorporate this
+                let _source = snip.source();
                 let span = Span { start: 0, end: name.as_str().len() };
-                let error = EvalError {
-                    kind: EvalErrorKind::UndefinedVar(name),
-                    source: source.into(),
-                    span
-                };
-                return Err(vec![Box::new(error) as Box<dyn Diagnostic>])
+                let kind = DefErrorKind::ReservedFunc(name);
+                let error = DefError { kind, name, span };
+                return Err(MathemaError::Definition(error))
             }
             context.set_function(name, func);
             Ok(Outcome::Fn(name))

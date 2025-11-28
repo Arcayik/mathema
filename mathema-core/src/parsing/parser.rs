@@ -1,7 +1,5 @@
 use std::{cell::Cell, error::Error, fmt::Display};
 
-use crate::error::Diagnostic;
-
 use super::{
     lexer::{LexToken, TokenBuffer},
     token::{Parse, Span, Spanned, Token}
@@ -20,20 +18,6 @@ impl Error for ParseError {}
 impl std::fmt::Display for ParseError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "{}", self.msg)
-    }
-}
-
-impl Diagnostic for ParseError {
-    fn message(&self) -> String {
-        self.to_string()
-    }
-
-    fn spans(&self) -> Option<Box<dyn Iterator<Item = Span>>> {
-        Some(Box::new(std::iter::once(self.span)))
-    }
-
-    fn source_code<'a>(&'a self) -> Option<Box<dyn std::fmt::Display + 'a>> {
-        None
     }
 }
 

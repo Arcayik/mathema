@@ -1,8 +1,7 @@
-use std::io::Write;
+use std::{collections::HashSet, io::Write};
 
 use mathema_core::{
-    context::{mathema_parse, Context, Outcome},
-    error::Diagnostic, value::MathemaValue,
+    context::{mathema_parse, Context, Outcome}, error::MathemaError, parsing::token::{Span, Spanned}, value::MathemaValue
 };
 
 pub struct Prompt {
@@ -26,19 +25,36 @@ impl Prompt {
         input.trim().to_string()
     }
 
-    pub fn show_error(&self, error: &dyn Diagnostic) {
-        if let Some(mut spans) = error.spans() 
-            && let Some(span) = spans.next() {
-                let until = span.start;
-                let len = span.end - span.start;
-                print!("{}", " ".repeat(self.prefix.len() + until));
-                println!("{}", "^".repeat(len));
+    pub fn show_outcome(&self, outcome: Outcome) {
+        if let Outcome::Answer(ans) = outcome {
+            println!("{}", ans);
         }
-        println!("{}", error.message());
     }
 
-    pub fn show_answer(&self, answer: MathemaValue) {
-        println!("{}", answer);
+    pub fn show_error(&self, context: &Context, error: &MathemaError) {
+        match error {
+            MathemaError::Lexer(errs) => {
+                let e = errs.first().unwrap();
+                self.span_line(e.span());
+                println!("{}", e);
+            },
+            MathemaError::Parser(e) => {
+                self.span_line(e.span());
+                println!("{}", e);
+            },
+            MathemaError::Definition(e) => {
+            },
+            MathemaError::Eval(errs) => {
+                let e = errs.first().unwrap();
+                self.span_line(e.span);
+                println!("{}", e);
+            }
+        }
+    }
+
+    fn span_line(&self, span: Span) {
+        print!("{}", " ".repeat(span.start + self.prefix.len()));
+        println!("{}", "^".repeat(span.end - span.start));
     }
 }
 
@@ -53,19 +69,9 @@ fn main() {
 
         let result = mathema_parse(&mut context, &input);
         match result {
-            Ok(outcome) => handle_outcome(&prompt, outcome),
-            Err(errs) => handle_errors(&prompt, errs),
+            Ok(outcome) => prompt.show_outcome(outcome),
+            Err(error) => prompt.show_error(&context, &error),
         }
     }
 }
 
-fn handle_outcome(state: &Prompt, outcome: Outcome) {
-    if let Outcome::Answer(ans) = outcome {
-        state.show_answer(ans)
-    }
-}
-
-fn handle_errors(state: &Prompt, errors: Vec<Box<dyn Diagnostic>>) {
-    // errors.iter().for_each(|e| state.show_error(e.as_ref()))
-    errors.first().map(|e| state.show_error(e.as_ref()));
-}

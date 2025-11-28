@@ -1,6 +1,4 @@
-use std::{error::Error, fmt::Display, ops::Deref, rc::Rc};
-
-use crate::error::Diagnostic;
+use std::{error::Error, ops::Deref, rc::Rc};
 
 use super::token::*;
 
@@ -29,6 +27,7 @@ impl std::fmt::Display for LexToken {
 
 #[derive(Clone, Debug)]
 pub struct LexError {
+    // TODO: replace this with snippets somehow
     src: Rc<str>,
     span: Span,
     kind: LexErrorKind
@@ -52,20 +51,6 @@ impl std::fmt::Display for LexError {
             LexErrorKind::UnclosedDelim => write!(f, "Unclosed delimiter"),
             LexErrorKind::TrailingDelim => write!(f, "Trailing delimiter"),
         }
-    }
-}
-
-impl Diagnostic for LexError {
-    fn message(&self) -> String {
-        self.to_string()
-    }
-
-    fn source_code<'a>(&'a self) -> Option<Box<dyn Display + 'a>> {
-        Some(Box::new(self.src.as_ref()))
-    }
-
-    fn spans(&self) -> Option<Box<dyn Iterator<Item = Span>>> {
-        Some(Box::new(std::iter::once(self.span)))
     }
 }
 

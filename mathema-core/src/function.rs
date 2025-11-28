@@ -1,5 +1,5 @@
 use crate::{
-    algebra::{self, eval_algebra, AlgExpr, EvalError, EvalErrorKind}, context::{CallError, Context}, intrinsics::{self, call_binary_func, call_unary_func, is_binary_func, is_unary_func}, snippet::{create_algebra_snippet, create_function_snippet}, symbol::Symbol, value::MathemaValue
+    algebra::{self, eval_algebra, AlgExpr, EvalError, EvalErrorKind}, context::{FuncError, Context}, intrinsics::{self, call_binary_func, call_unary_func, is_binary_func, is_unary_func}, snippet::{create_algebra_snippet, create_function_snippet}, symbol::Symbol, value::MathemaValue
 };
 
 #[derive(Debug)]
@@ -98,7 +98,7 @@ impl std::fmt::Display for ArgInUse {
 
 impl std::error::Error for ArgInUse {}
 
-fn eval_user_function(context: &Context, function: &Function, input: &[MathemaValue]) -> Result<MathemaValue, CallError> {
+fn eval_user_function(context: &Context, function: &Function, input: &[MathemaValue]) -> Result<MathemaValue, FuncError> {
     fn recurse(
         context: &Context,
         function: &Function,
@@ -186,7 +186,7 @@ fn eval_user_function(context: &Context, function: &Function, input: &[MathemaVa
 
     let args_off = input.len() as isize - function.args.len() as isize;
     if args_off != 0 {
-        return Err(CallError::BadArgs(name, args_off))
+        return Err(FuncError::BadArgs(name, args_off))
     }
 
     let origin = create_function_snippet(&function).source().into();
@@ -194,10 +194,10 @@ fn eval_user_function(context: &Context, function: &Function, input: &[MathemaVa
      
     let mut errors = Vec::new();
     let result = recurse(context, function, input, &function.body, &mut errors);
-    result.ok_or(CallError::Eval { name, origin, errors })
+    result.ok_or(FuncError::Eval { name, origin, errors })
 }
 
-pub fn call_function(context: &Context, name: Symbol, input: &[MathemaValue]) -> Result<MathemaValue, CallError> {
+pub fn call_function(context: &Context, name: Symbol, input: &[MathemaValue]) -> Result<MathemaValue, FuncError> {
     if let Some(func) = context.get_function(name) {
         eval_user_function(context, func, input)
     } else if is_unary_func(name.as_str()) && input.len() == 1 {
@@ -205,6 +205,6 @@ pub fn call_function(context: &Context, name: Symbol, input: &[MathemaValue]) ->
     } else if is_binary_func(name.as_str()) && input.len() == 2 {
         Ok(call_binary_func(name.as_str(), input[0].clone(), input[1].clone()))
     } else {
-        Err(CallError::NotDefined(name))
+        Err(FuncError::NotDefined(name))
     }
 }

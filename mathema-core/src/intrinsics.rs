@@ -62,6 +62,10 @@ fn declare_binary() -> HashMap<&'static str, BinaryFunc> {
     hashmap
 }
 
+pub fn is_constant(name: &str) -> bool {
+    CONSTANTS.contains_key(name)
+}
+
 pub fn is_unary_func(name: &str) -> bool {
     UNARY_FUNCS.contains_key(name)
 }

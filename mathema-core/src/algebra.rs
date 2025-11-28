@@ -1,6 +1,5 @@
 use crate::{
-    context::{CallError, Context},
-    error::Diagnostic,
+    context::{Context, FuncError, VarError},
     float,
     function::{call_function, FnArgs, Function},
     intrinsics, parsing::{
@@ -199,6 +198,8 @@ pub struct FnCall {
     pub(crate) args: Vec<AlgExpr>,
 }
 
+// TODO: make it populate the hash table or something with original span, which changes if
+// something new happens
 pub struct ExprToAlgebra;
 
 impl AstVisit for ExprToAlgebra {
@@ -324,39 +325,25 @@ pub trait AlgebraFold {
 #[derive(Debug)]
 pub enum EvalErrorKind {
     UndefinedVar(Symbol),
-    BadFnCall(CallError)
+    BadFnCall(FuncError),
+    BadVar(VarError),
 }
 
 #[derive(Debug)]
 pub struct EvalError {
     pub kind: EvalErrorKind,
-    pub(crate) source: String,
-    pub(crate) span: Span
+    pub source: String,
+    pub span: Span
 }
 
 impl std::fmt::Display for EvalError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let str = match &self.kind {
             EvalErrorKind::UndefinedVar(s) => format!("undefined var: {s}"),
-            EvalErrorKind::BadFnCall(e) => e.to_string()
+            EvalErrorKind::BadFnCall(e) => "Bad function call: TODO!".to_string(),
+            EvalErrorKind::BadVar(ve) => "Bad variable: TODO!".to_string()
         };
         write!(f, "{}", str)
-    }
-}
-
-impl std::error::Error for EvalError {}
-
-impl Diagnostic for EvalError {
-    fn message(&self) -> String {
-        self.to_string()
-    }
-
-    fn source_code<'a>(&'a self) -> Option<Box<dyn std::fmt::Display + 'a>> {
-        Some(Box::new(self.source.clone()))
-    }
-
-    fn spans(&self) -> Option<Box<dyn Iterator<Item = Span>>> {
-        Some(Box::new(std::iter::once(self.span)))
     }
 }
 
@@ -376,6 +363,7 @@ pub fn eval_algebra(context: &Context, algebra: &AlgExpr) -> Result<MathemaValue
                     } else if let Some(c) = intrinsics::CONSTANTS.get(var.as_str()) {
                         Some(c.clone())
                     } else {
+                        assert!(std::ptr::eq(root, algebra));
                         let snippet = create_algebra_snippet(root);
                         let source = snippet.source();
                         let span = snippet.get_span(algebra).unwrap();

@@ -1,7 +1,7 @@
 use std::{collections::HashMap, sync::LazyLock};
 use rug::float::Constant;
 
-use crate::value::MathemaValue;
+use crate::{context::FuncError, value::MathemaValue};
 use functions::*;
 
 pub static CONSTANTS: LazyLock<HashMap<&'static str, MathemaValue>> = LazyLock::new(declare_constants);
@@ -74,14 +74,14 @@ pub fn is_binary_func(name: &str) -> bool {
     BINARY_FUNCS.contains_key(name)
 }
 
-pub fn call_unary_func(name: &str, x: MathemaValue) -> MathemaValue {
+pub fn call_unary_func(name: &str, x: MathemaValue) -> Result<MathemaValue, FuncError> {
     let func = UNARY_FUNCS.get(name).unwrap();
-    func.call(x)
+    Ok(func.call(x))
 }
 
-pub fn call_binary_func(name: &str, x: MathemaValue, y: MathemaValue) -> MathemaValue {
+pub fn call_binary_func(name: &str, x: MathemaValue, y: MathemaValue) -> Result<MathemaValue, FuncError> {
     let func = BINARY_FUNCS.get(name).unwrap();
-    func.call(x, y)
+    Ok(func.call(x, y))
 }
 
 mod functions {

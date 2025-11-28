@@ -1,4 +1,4 @@
-use std::collections::{hash_map::{Values, ValuesMut}, HashMap};
+use std::{collections::{hash_map, HashMap}};
 
 use crate::{algebra::{AlgBinOp, AlgExpr, Value}, function::Function, parsing::{ast::Precedence, token::Span}, symbol::Symbol};
 
@@ -24,11 +24,11 @@ impl SnippetLine {
         self.span_map.get(&key).copied()
     }
 
-    pub fn spans(&self) -> Values<'_, *const AlgExpr, Span> {
+    pub fn spans(&self) -> hash_map::Values<'_, *const AlgExpr, Span> {
         self.span_map.values()
     }
 
-    pub fn spans_mut(&mut self) -> ValuesMut<'_, *const AlgExpr, Span> {
+    pub fn spans_mut(&mut self) -> hash_map::ValuesMut<'_, *const AlgExpr, Span> {
         self.span_map.values_mut()
     }
 }

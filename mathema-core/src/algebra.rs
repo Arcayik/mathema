@@ -1,14 +1,8 @@
 use crate::{
-    context::{Context, FuncError, VarError},
-    float,
-    function::{call_function, FnArgs, Function},
-    intrinsics, parsing::{
+    context::{call_variable, Context, FuncError, VarError}, error::MathemaError, float, function::{call_function, FnArgs, Function}, intrinsics, parsing::{
         ast::{AstBinary, AstExpr, AstFnCall, AstGroup, AstStmt, AstUnary, AstValue, AstVisit, BinOp, UnaryOp},
         token::Span
-    },
-    snippet::create_algebra_snippet,
-    symbol::Symbol,
-    value::MathemaValue
+    }, snippet::create_algebra_snippet, symbol::Symbol, value::MathemaValue
 };
 
 pub enum AlgStmt {
@@ -324,7 +318,6 @@ pub trait AlgebraFold {
 
 #[derive(Debug)]
 pub enum EvalErrorKind {
-    UndefinedVar(Symbol),
     BadFnCall(FuncError),
     BadVar(VarError),
 }
@@ -339,7 +332,6 @@ pub struct EvalError {
 impl std::fmt::Display for EvalError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let str = match &self.kind {
-            EvalErrorKind::UndefinedVar(s) => format!("undefined var: {s}"),
             EvalErrorKind::BadFnCall(e) => "Bad function call: TODO!".to_string(),
             EvalErrorKind::BadVar(ve) => "Bad variable: TODO!".to_string()
         };
@@ -358,22 +350,16 @@ pub fn eval_algebra(context: &Context, algebra: &AlgExpr) -> Result<MathemaValue
             AlgExpr::Value(val) => match val {
                 Value::Num(num) => Some(num.clone()),
                 Value::Var(var) => {
-                    if let Some(alg) = context.get_variable(*var) {
-                        recurse(context, root, alg, errors)
-                    } else if let Some(c) = intrinsics::CONSTANTS.get(var.as_str()) {
-                        Some(c.clone())
-                    } else {
-                        assert!(std::ptr::eq(root, algebra));
-                        let snippet = create_algebra_snippet(root);
-                        let source = snippet.source();
-                        let span = snippet.get_span(algebra).unwrap();
-                        let error = EvalError {
-                            kind: EvalErrorKind::UndefinedVar(*var),
-                            source: source.into(),
-                            span,
-                        };
-                        errors.push(error);
-                        None
+                    match call_variable(context, *var) {
+                        Ok(ans) => Some(ans),
+                        Err(e) => {
+                            let kind = EvalErrorKind::BadVar(e);
+                            let snip = create_algebra_snippet(root);
+                            let source = snip.source().to_string();
+                            let span = snip.get_span(algebra).unwrap();
+                            errors.push(EvalError { kind, source, span });
+                            None
+                        }
                     }
                 }
             },

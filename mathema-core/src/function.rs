@@ -1,5 +1,10 @@
 use crate::{
-    algebra::{self, eval_algebra, AlgExpr, EvalError, EvalErrorKind}, context::{FuncError, Context}, intrinsics::{self, call_binary_func, call_unary_func, is_binary_func, is_unary_func}, snippet::{create_algebra_snippet, create_function_snippet}, symbol::Symbol, value::MathemaValue
+    algebra::{self, eval_algebra, AlgExpr, EvalError, EvalErrorKind},
+    context::{call_variable, Context, FuncError},
+    intrinsics::{self, call_binary_func, call_unary_func, is_binary_func, is_unary_func},
+    snippet::{create_algebra_snippet, create_function_snippet},
+    symbol::Symbol,
+    value::MathemaValue
 };
 
 #[derive(Debug)]
@@ -112,23 +117,21 @@ fn eval_user_function(context: &Context, function: &Function, input: &[MathemaVa
                 algebra::Value::Var(var) => {
                     if let Some(idx) = function.args.idx_of(*var) {
                         Some(input[idx].clone())
-                    } else if let Some(expr) = context.get_variable(*var) {
-                        eval_algebra(context, expr)
-                            .map_err(|mut e| errors.append(&mut e))
-                            .ok()
-                    } else if let Some(c) = intrinsics::CONSTANTS.get(var.as_str()) {
-                        Some(c.clone())
                     } else {
-                        let snip = create_algebra_snippet(&function.body);
-                        let source = snip.source();
-                        let span = snip.get_span(algebra).unwrap();
-                        let error = EvalError {
-                            kind: EvalErrorKind::UndefinedVar(*var),
-                            source: source.into(),
-                            span,
-                        };
-                        errors.push(error);
-                        None
+                        match call_variable(context, *var) {
+                            Ok(ans) => Some(ans),
+                            Err(e) => {
+                                let kind = EvalErrorKind::BadVar(e);
+                                let snip = create_function_snippet(function);
+                                let source = snip.source().into();
+                                let span = snip.get_span(algebra).unwrap();
+                                let error = EvalError {
+                                    kind, source, span
+                                };
+                                errors.push(error);
+                                None
+                            }
+                        }
                     }
                 }
             },
@@ -190,7 +193,6 @@ fn eval_user_function(context: &Context, function: &Function, input: &[MathemaVa
     }
 
     let origin = create_function_snippet(&function).source().into();
-    dbg!(&origin);
      
     let mut errors = Vec::new();
     let result = recurse(context, function, input, &function.body, &mut errors);
@@ -201,9 +203,9 @@ pub fn call_function(context: &Context, name: Symbol, input: &[MathemaValue]) ->
     if let Some(func) = context.get_function(name) {
         eval_user_function(context, func, input)
     } else if is_unary_func(name.as_str()) && input.len() == 1 {
-        Ok(call_unary_func(name.as_str(), input[0].clone()))
+        call_unary_func(name.as_str(), input[0].clone())
     } else if is_binary_func(name.as_str()) && input.len() == 2 {
-        Ok(call_binary_func(name.as_str(), input[0].clone(), input[1].clone()))
+        call_binary_func(name.as_str(), input[0].clone(), input[1].clone())
     } else {
         Err(FuncError::NotDefined(name))
     }

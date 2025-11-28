@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 
 use crate::{
-    algebra::{eval_algebra, AlgExpr, AlgStmt, EvalError, Value}, error::MathemaError, function::Function, intrinsics, parsing::{
+    algebra::{eval_algebra, AlgExpr, AlgStmt, EvalError, Value}, error::MathemaError, function::Function, intrinsics::{self, is_binary_func, is_constant, is_unary_func}, parsing::{
         ast::AstStmt,
         lexer::tokenize,
         parser::ParseBuffer, token::Span,
@@ -80,6 +80,22 @@ pub enum Outcome {
     Fn(Symbol)
 }
 
+pub fn call_variable(context: &Context, name: Symbol) -> Result<MathemaValue, VarError> {
+    if is_constant(name.as_str()) {
+        Ok(intrinsics::CONSTANTS[name.as_str()].clone())
+    } else if let Some(var) = context.get_variable(name) {
+        match eval_algebra(context, var) {
+            Ok(ans) => Ok(ans),
+            Err(errors) => {
+                let origin = create_algebra_snippet(var).source().into();
+                Err(VarError::Eval { name, origin, errors })
+            }
+        }
+    } else {
+        Err(VarError::NotDefined(name))
+    }
+}
+
 pub fn mathema_parse(context: &mut Context, input: &str) -> Result<Outcome, MathemaError> {
     let (buffer, errors) = tokenize(input);
     if !errors.is_empty() {
@@ -104,7 +120,7 @@ pub fn mathema_parse(context: &mut Context, input: &str) -> Result<Outcome, Math
             }
         },
         AlgStmt::VarDecl(name, alg) => {
-            if intrinsics::CONSTANTS.contains_key(name.as_str()) {
+            if is_constant(name.as_str()) {
                 let snip = create_algebra_snippet(&alg);
                 let _source = snip.source();
                 let span = Span { start: 0, end: name.as_str().len() };
@@ -117,7 +133,7 @@ pub fn mathema_parse(context: &mut Context, input: &str) -> Result<Outcome, Math
         },
         AlgStmt::FnDecl(func) => {
             let name = func.name;
-            if intrinsics::UNARY_FUNCS.contains_key(name.as_str()) || intrinsics::BINARY_FUNCS.contains_key(name.as_str()) {
+            if is_unary_func(name.as_str()) || is_binary_func(name.as_str()) {
                 let snip = create_function_snippet(&func);
                 // TODO: incorporate this
                 let _source = snip.source();

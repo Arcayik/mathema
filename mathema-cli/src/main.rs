@@ -1,7 +1,9 @@
-use std::{collections::HashSet, io::Write};
+use std::io::Write;
 
 use mathema_core::{
-    context::{mathema_parse, Context, Outcome}, error::MathemaError, parsing::token::{Span, Spanned}, value::MathemaValue
+    context::{mathema_parse, Context, Outcome},
+    error::MathemaError,
+    parsing::token::{Span, Spanned},
 };
 
 pub struct Prompt {

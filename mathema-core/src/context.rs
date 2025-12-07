@@ -106,10 +106,15 @@ pub fn mathema_parse(context: &mut Context, input: &str) -> Result<Outcome, Math
     let stmt = parsebuffer.parse::<AstStmt>()
         .map_err(|e| MathemaError::Parser(e))?;
 
-    let alg_stmt = AlgStmt::from_expr_stmt(&stmt);
-    match alg_stmt {
-        AlgStmt::Expr(expr) => {
-            match eval_algebra(context, &expr) {
+    match stmt {
+        AstStmt::Expr(expr) => {
+            let (alg, span_map) = expr_to_algebra(&expr);
+            let mut snip = SnippetLine::empty();
+            snip.source = input.to_string();
+            snip.span_map = span_map;
+            context.snippets.insert_var(Symbol::intern("ans"), snip);
+
+            match eval_algebra(context, &alg) {
                 Ok(ans) => {
                     context.set_variable(Symbol::intern("ans"), AlgExpr::Value(Value::Num(ans.clone())));
                     Ok(Outcome::Answer(ans))
@@ -119,19 +124,34 @@ pub fn mathema_parse(context: &mut Context, input: &str) -> Result<Outcome, Math
                 }
             }
         },
-        AlgStmt::VarDecl(name, alg) => {
+        AstStmt::VarDecl(decl) => {
+            let name = decl.var_name.symbol;
+            let (alg, _span_map) = expr_to_algebra(&decl.expr);
+
+            let snip = create_var_decl_snippet(name, &alg);
+            context.snippets.insert_var(name, snip);
+
             if is_constant(name.as_str()) {
-                let snip = create_algebra_snippet(&alg);
-                let _source = snip.source();
                 let span = Span { start: 0, end: name.as_str().len() };
                 let kind = DefErrorKind::ReservedVar(name);
-                let error = DefError { kind, name, span };
+                let error = DefError { kind, span };
                 return Err(MathemaError::Definition(error))
             }
             context.set_variable(name, alg);
             Ok(Outcome::Var(name))
         },
-        AlgStmt::FnDecl(func) => {
+        AstStmt::FnDecl(decl) => {
+            let name = decl.sig.fn_name.symbol;
+            let (alg, _span_map) = expr_to_algebra(&decl.expr);
+
+            let arg_vec: Vec<Symbol> = decl.sig.inputs
+                .iter()
+                .map(|i| i.symbol)
+                .collect();
+            let args = FnArgs::from_vec(arg_vec);
+
+            let func = Function::new(name, alg, args);
+
             let name = func.name;
             if is_unary_func(name.as_str()) || is_binary_func(name.as_str()) {
                 let snip = create_function_snippet(&func);
@@ -139,7 +159,7 @@ pub fn mathema_parse(context: &mut Context, input: &str) -> Result<Outcome, Math
                 let _source = snip.source();
                 let span = Span { start: 0, end: name.as_str().len() };
                 let kind = DefErrorKind::ReservedFunc(name);
-                let error = DefError { kind, name, span };
+                let error = DefError { kind, span };
                 return Err(MathemaError::Definition(error))
             }
             context.set_function(name, func);

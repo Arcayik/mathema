@@ -1,71 +1,17 @@
+use std::collections::HashMap;
+
 use crate::{
-    context::{call_variable, Context, FuncError, VarError}, error::MathemaError, float, function::{call_function, FnArgs, Function}, intrinsics, parsing::{
-        ast::{AstBinary, AstExpr, AstFnCall, AstGroup, AstStmt, AstUnary, AstValue, AstVisit, BinOp, UnaryOp},
-        token::Span
-    }, snippet::create_algebra_snippet, symbol::Symbol, value::MathemaValue
+    parsing::{
+        ast::{AstExpr, AstValue, BinOp, UnaryOp},
+        token::{Span, Spanned}
+    },
+    context::{call_variable, Context, FuncError, VarError},
+    function::call_function,
+    snippet::create_algebra_snippet,
+    symbol::Symbol,
+    value::MathemaValue,
+    float,
 };
-
-pub enum AlgStmt {
-    Expr(AlgExpr),
-    VarDecl(Symbol, AlgExpr),
-    FnDecl(Function),
-}
-
-impl std::fmt::Display for AlgStmt {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            AlgStmt::Expr(alg) => {
-                let snip = create_algebra_snippet(alg);
-                let body = snip.source();
-                write!(f, "{}", body)
-            },
-            AlgStmt::VarDecl(var, alg) => {
-                let snip = create_algebra_snippet(alg);
-                let body = snip.source();
-                write!(f, "{} = {}", var.as_str(), body)
-            },
-            AlgStmt::FnDecl(func) => {
-                let snip = create_algebra_snippet(&func.body);
-                let body = snip.source();
-                let args = func.args.get_args()
-                    .iter()
-                    .map(|a| a.as_str())
-                    .collect::<Vec<_>>()
-                    .join(", ");
-                write!(f, "{}({}) = {}", func.name, args, body)
-            }
-        }
-    }
-}
-
-impl AlgStmt {
-    pub fn from_expr_stmt(stmt: &AstStmt) -> Self {
-        match stmt {
-            AstStmt::Expr(expr) => {
-                let alg = ExprToAlgebra.visit_expr(expr);
-                AlgStmt::Expr(alg)
-            },
-            AstStmt::VarDecl(decl) => {
-                let name = decl.var_name.symbol;
-                let alg = ExprToAlgebra.visit_expr(&decl.expr);
-                AlgStmt::VarDecl(name, alg)
-            },
-            AstStmt::FnDecl(decl) => {
-                let name = decl.sig.fn_name.symbol;
-                let alg = ExprToAlgebra.visit_expr(&decl.expr);
-
-                let arg_vec: Vec<Symbol> = decl.sig.inputs
-                    .iter()
-                    .map(|i| i.symbol)
-                    .collect();
-                let args = FnArgs::from_vec(arg_vec);
-
-                let func = Function::new(name, alg, args);
-                AlgStmt::FnDecl(func)
-            }
-        }
-    }
-}
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum AlgExpr {
@@ -192,64 +138,69 @@ pub struct FnCall {
     pub(crate) args: Vec<AlgExpr>,
 }
 
-// TODO: make it populate the hash table or something with original span, which changes if
-// something new happens
-pub struct ExprToAlgebra;
+pub fn expr_to_algebra(ast: &AstExpr) -> (AlgExpr, HashMap<*const AlgExpr, Span>) {
+    fn recurse(
+        ast: &AstExpr,
+        span_map: &mut HashMap<*const AlgExpr, Span>
+    ) -> AlgExpr {
+        match ast {
+            AstExpr::Value(v) => {
+                let alg = match v {
+                    AstValue::Literal(l) => Value::Num(float!(l.num)),
+                    AstValue::Ident(id) => Value::Var(id.symbol)
+                }.into();
 
-impl AstVisit for ExprToAlgebra {
-    type Result = AlgExpr;
+                span_map.insert(&alg as *const _, v.span());
+                alg
+            },
+            AstExpr::Unary(u) => {
+                let expr_node = recurse(&u.expr, span_map);
+                let alg = Unary {
+                    op: u.op.clone().into(),
+                    expr: Box::new(expr_node)
+                }.into();
 
-    fn visit_expr(&mut self, expr: &AstExpr) -> Self::Result {
-        match expr {
-            AstExpr::Value(e) => self.visit_value(e),
-            AstExpr::Unary(e) => self.visit_unary(e),
-            AstExpr::Binary(e) => self.visit_binary(e),
-            AstExpr::FnCall(e) => self.visit_fn_call(e),
-            AstExpr::Group(e) => self.visit_group(e),
+                span_map.insert(&alg as *const _, u.span());
+                alg
+            },
+            AstExpr::Binary(b) => {
+                let left = recurse(&b.lhs, span_map);
+                let right = recurse(&b.rhs, span_map);
+                let span = b.span();
+
+                let alg = Binary {
+                    left: Box::new(left),
+                    op: b.op.clone().into(),
+                    right: Box::new(right),
+                }.into();
+
+                span_map.insert(&alg as *const _, span);
+                alg
+            },
+            AstExpr::Group(g) => {
+                let alg = recurse(&g.expr, span_map);
+                span_map.insert(&alg as *const _, g.span());
+                alg
+            },
+            AstExpr::FnCall(f) => {
+                let args: Vec<AlgExpr> = f.inputs.iter()
+                    .map(|expr| recurse(expr, span_map))
+                    .collect();
+
+                let alg = FnCall {
+                    args,
+                    name: f.fn_name.symbol
+                }.into();
+
+                span_map.insert(&alg, f.span());
+                alg
+            }
         }
     }
 
-    fn visit_value(&mut self, value: &AstValue) -> Self::Result {
-        match value {
-            AstValue::Literal(l) => Value::Num(float!(l.num)).into(),
-            AstValue::Ident(id) => Value::Var(id.symbol).into()
-        }
-    }
-
-    fn visit_binary(&mut self, binary: &AstBinary) -> Self::Result {
-        let left = self.visit_expr(&binary.lhs);
-        let right = self.visit_expr(&binary.rhs);
-
-        Binary {
-            left: Box::new(left),
-            op: binary.op.clone().into(),
-            right: Box::new(right),
-        }.into()
-    }
-
-    fn visit_unary(&mut self, unary: &AstUnary) -> Self::Result {
-        let expr_node = self.visit_expr(&unary.expr);
-
-        Unary {
-            op: unary.op.clone().into(),
-            expr: Box::new(expr_node)
-        }.into()
-    }
-
-    fn visit_group(&mut self, group: &AstGroup) -> Self::Result {
-        self.visit_expr(&group.expr)
-    }
-
-    fn visit_fn_call(&mut self, fn_call: &AstFnCall) -> Self::Result {
-        let args: Vec<AlgExpr> = fn_call.inputs.iter()
-            .map(|expr| self.visit_expr(expr))
-            .collect();
-
-        FnCall {
-            args,
-            name: fn_call.fn_name.symbol
-        }.into()
-    }
+    let mut span_map = HashMap::new();
+    let alg = recurse(ast, &mut span_map);
+    (alg, span_map)
 }
 
 pub trait AlgebraVisit {
@@ -329,15 +280,15 @@ pub struct EvalError {
     pub span: Span
 }
 
-impl std::fmt::Display for EvalError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let str = match &self.kind {
-            EvalErrorKind::BadFnCall(e) => "Bad function call: TODO!".to_string(),
-            EvalErrorKind::BadVar(ve) => "Bad variable: TODO!".to_string()
-        };
-        write!(f, "{}", str)
-    }
-}
+// impl std::fmt::Display for EvalError {
+//     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+//         let str = match &self.kind {
+//             EvalErrorKind::BadFnCall(e) => "Bad function call: TODO!".to_string(),
+//             EvalErrorKind::BadVar(ve) => "Bad variable: TODO!".to_string()
+//         };
+//         write!(f, "{}", str)
+//     }
+// }
 
 pub fn eval_algebra(context: &Context, algebra: &AlgExpr) -> Result<MathemaValue, Vec<EvalError>> {
     fn recurse(

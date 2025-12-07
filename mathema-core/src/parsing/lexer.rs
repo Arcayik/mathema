@@ -27,7 +27,6 @@ impl std::fmt::Display for LexToken {
 
 #[derive(Clone, Debug)]
 pub struct LexError {
-    // TODO: replace this with snippets somehow
     src: Rc<str>,
     span: Span,
     kind: LexErrorKind

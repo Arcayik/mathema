@@ -27,7 +27,6 @@ impl std::fmt::Display for LexToken {
 
 #[derive(Clone, Debug)]
 pub struct LexError {
-    src: Rc<str>,
     span: Span,
     kind: LexErrorKind
 }
@@ -335,7 +334,6 @@ impl<'s> Tokenizer<'s> {
         let span = self.lexer.span_char();
         let kind = LexErrorKind::UnknownChar(self.lexer.next().expect("no char"));
         let error = LexError {
-            src: self.lexer.source.clone(),
             span,
             kind,
         };
@@ -345,7 +343,6 @@ impl<'s> Tokenizer<'s> {
     fn num_parse_error(&mut self, span: Span) {
         let kind = LexErrorKind::NumParseError;
         let error = LexError {
-            src: self.lexer.source.clone(),
             span,
             kind
         };
@@ -356,7 +353,6 @@ impl<'s> Tokenizer<'s> {
         let span = group.span();
         let kind = LexErrorKind::UnclosedDelim;
         let error = LexError {
-            src: self.lexer.source.clone(),
             span,
             kind
         };
@@ -367,7 +363,6 @@ impl<'s> Tokenizer<'s> {
         let span = self.lexer.span_char();
         let kind = LexErrorKind::TrailingDelim;
         let error = LexError {
-            src: self.lexer.source.clone(),
             span,
             kind
         };

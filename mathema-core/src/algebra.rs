@@ -1,13 +1,9 @@
-use std::collections::HashMap;
-
 use crate::{
     parsing::{
         ast::{AstExpr, AstValue, BinOp, UnaryOp},
-        token::{Span, Spanned}
     },
     context::{call_variable, Context, FuncError, VarError},
     function::call_function,
-    snippet::create_algebra_snippet,
     symbol::Symbol,
     value::MathemaValue,
     float,
@@ -138,11 +134,8 @@ pub struct FnCall {
     pub(crate) args: Vec<AlgExpr>,
 }
 
-pub fn expr_to_algebra(ast: &AstExpr) -> (AlgExpr, HashMap<*const AlgExpr, Span>) {
-    fn recurse(
-        ast: &AstExpr,
-        span_map: &mut HashMap<*const AlgExpr, Span>
-    ) -> AlgExpr {
+pub fn expr_to_algebra(ast: &AstExpr) -> AlgExpr {
+    fn recurse(ast: &AstExpr) -> AlgExpr {
         match ast {
             AstExpr::Value(v) => {
                 let alg = match v {
@@ -150,23 +143,20 @@ pub fn expr_to_algebra(ast: &AstExpr) -> (AlgExpr, HashMap<*const AlgExpr, Span>
                     AstValue::Ident(id) => Value::Var(id.symbol)
                 }.into();
 
-                span_map.insert(&alg as *const _, v.span());
                 alg
             },
             AstExpr::Unary(u) => {
-                let expr_node = recurse(&u.expr, span_map);
+                let expr_node = recurse(&u.expr);
                 let alg = Unary {
                     op: u.op.clone().into(),
                     expr: Box::new(expr_node)
                 }.into();
 
-                span_map.insert(&alg as *const _, u.span());
                 alg
             },
             AstExpr::Binary(b) => {
-                let left = recurse(&b.lhs, span_map);
-                let right = recurse(&b.rhs, span_map);
-                let span = b.span();
+                let left = recurse(&b.lhs);
+                let right = recurse(&b.rhs);
 
                 let alg = Binary {
                     left: Box::new(left),
@@ -174,17 +164,15 @@ pub fn expr_to_algebra(ast: &AstExpr) -> (AlgExpr, HashMap<*const AlgExpr, Span>
                     right: Box::new(right),
                 }.into();
 
-                span_map.insert(&alg as *const _, span);
                 alg
             },
             AstExpr::Group(g) => {
-                let alg = recurse(&g.expr, span_map);
-                span_map.insert(&alg as *const _, g.span());
+                let alg = recurse(&g.expr);
                 alg
             },
             AstExpr::FnCall(f) => {
                 let args: Vec<AlgExpr> = f.inputs.iter()
-                    .map(|expr| recurse(expr, span_map))
+                    .map(recurse)
                     .collect();
 
                 let alg = FnCall {
@@ -192,15 +180,12 @@ pub fn expr_to_algebra(ast: &AstExpr) -> (AlgExpr, HashMap<*const AlgExpr, Span>
                     name: f.fn_name.symbol
                 }.into();
 
-                span_map.insert(&alg, f.span());
                 alg
             }
         }
     }
 
-    let mut span_map = HashMap::new();
-    let alg = recurse(ast, &mut span_map);
-    (alg, span_map)
+    recurse(ast)
 }
 
 pub trait AlgebraVisit {
@@ -276,8 +261,6 @@ pub enum EvalErrorKind {
 #[derive(Debug)]
 pub struct EvalError {
     pub kind: EvalErrorKind,
-    pub source: String,
-    pub span: Span
 }
 
 // impl std::fmt::Display for EvalError {
@@ -305,10 +288,7 @@ pub fn eval_algebra(context: &Context, algebra: &AlgExpr) -> Result<MathemaValue
                         Ok(ans) => Some(ans),
                         Err(e) => {
                             let kind = EvalErrorKind::BadVar(e);
-                            let snip = create_algebra_snippet(root);
-                            let source = snip.source().to_string();
-                            let span = snip.get_span(algebra).unwrap();
-                            errors.push(EvalError { kind, source, span });
+                            errors.push(EvalError { kind });
                             None
                         }
                     }
@@ -348,14 +328,8 @@ pub fn eval_algebra(context: &Context, algebra: &AlgExpr) -> Result<MathemaValue
                 match call_function(context, fc.name, &args) {
                     Ok(ans) => Some(ans),
                     Err(e) => {
-                        let snippet = create_algebra_snippet(root);
-                        let source = snippet.source();
-                        let span = snippet.get_span(algebra).unwrap();
-                        let error = EvalError {
-                            kind: EvalErrorKind::BadFnCall(e),
-                            source: source.into(),
-                            span,
-                        };
+                        let kind = EvalErrorKind::BadFnCall(e);
+                        let error = EvalError { kind };
                         errors.push(error);
                         None
                     }

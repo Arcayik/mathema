@@ -1,9 +1,10 @@
 use std::io::Write;
 
 use mathema_core::{
-    context::{mathema_parse, Context, Outcome},
-    error::MathemaError,
+    context::{mathema_parse, Context, DefErrorKind, FuncError, Outcome, VarError},
     parsing::token::{Span, Spanned},
+    algebra::EvalErrorKind,
+    error::MathemaError,
 };
 
 pub struct Prompt {
@@ -33,29 +34,68 @@ impl Prompt {
         }
     }
 
-    pub fn show_error(&self, context: &Context, error: &MathemaError) {
+    pub fn show_error(&self, error: &MathemaError) {
         match error {
             MathemaError::Lexer(errs) => {
                 let e = errs.first().unwrap();
-                self.span_line(e.span());
+                self.prompt_span_line(e.span());
                 println!("{}", e);
             },
             MathemaError::Parser(e) => {
-                self.span_line(e.span());
+                self.prompt_span_line(e.span());
                 println!("{}", e);
             },
             MathemaError::Definition(e) => {
+                self.prompt_span_line(e.span);
+                match e.kind {
+                    DefErrorKind::ReservedVar(var) => {
+                        println!("Reserved var: {var}");
+                    },
+                    DefErrorKind::ReservedFunc(func) => {
+                        println!("Reserved func: {func}");
+                    }
+                }
             },
             MathemaError::Eval(errs) => {
                 let e = errs.first().unwrap();
-                self.span_line(e.span);
-                println!("{}", e);
+                // TODO
+                // self.prompt_span_line(e.span);
+
+                // since this is straight from an invocation,
+                // we can ignore `e.source` since it is literally on the screen
+
+                match &e.kind {
+                    EvalErrorKind::BadVar(var_e) => match var_e {
+                        VarError::Eval { name: _, errors } => {
+                            let e2 = errors.first().unwrap();
+                            println!("{:?}", e2.kind);
+                        },
+                        VarError::NotDefined(symbol) => {
+                            println!("Undefined var: {symbol}");
+                        }
+                    },
+                    EvalErrorKind::BadFnCall(func_e) => match func_e {
+                        FuncError::Eval { name, errors: _ } => {
+                            println!("[fn] {name}");
+                        },
+                        FuncError::BadArgs(_, _) => {
+                            todo!();
+                        },
+                        FuncError::NotDefined(name) => {
+                            println!("Undefined func: {name}",)
+                        }
+                    }
+                }
             }
         }
     }
 
-    fn span_line(&self, span: Span) {
-        print!("{}", " ".repeat(span.start + self.prefix.len()));
+    fn prompt_span_line(&self, span: Span) {
+        self.span_line(span, self.prefix.len());
+    }
+
+    fn span_line(&self, span: Span, offset: usize) {
+        print!("{}", " ".repeat(span.start + offset));
         println!("{}", "^".repeat(span.end - span.start));
     }
 }
@@ -72,7 +112,7 @@ fn main() {
         let result = mathema_parse(&mut context, &input);
         match result {
             Ok(outcome) => prompt.show_outcome(outcome),
-            Err(error) => prompt.show_error(&context, &error),
+            Err(error) => prompt.show_error(&error),
         }
     }
 }

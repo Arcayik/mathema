@@ -1,11 +1,17 @@
 use std::collections::HashMap;
 
 use crate::{
-    algebra::{eval_algebra, AlgExpr, AlgStmt, EvalError, Value}, error::MathemaError, function::Function, intrinsics::{self, is_binary_func, is_constant, is_unary_func}, parsing::{
+    algebra::{eval_algebra, expr_to_algebra, AlgExpr, EvalError, Value},
+    function::{FnArgs, Function},
+    intrinsics::{self, is_binary_func, is_constant, is_unary_func},
+    parsing::{
         ast::AstStmt,
         lexer::tokenize,
         parser::ParseBuffer, token::Span,
-    }, snippet::{create_algebra_snippet, create_function_snippet}, symbol::Symbol, value::MathemaValue
+    },
+    value::MathemaValue,
+    error::MathemaError,
+    symbol::Symbol,
 };
 
 #[derive(Default)]
@@ -43,7 +49,6 @@ impl Context {
 #[derive(Debug)]
 pub struct DefError {
     pub kind: DefErrorKind,
-    pub name: Symbol,
     pub span: Span
 }
 
@@ -58,7 +63,6 @@ pub enum FuncError {
     BadArgs(Symbol, isize),
     Eval {
         name: Symbol,
-        origin: Box<str>,
         errors: Vec<EvalError>
     },
     NotDefined(Symbol)
@@ -68,7 +72,6 @@ pub enum FuncError {
 pub enum VarError {
     Eval {
         name: Symbol,
-        origin: Box<str>,
         errors: Vec<EvalError>
     },
     NotDefined(Symbol)
@@ -87,8 +90,7 @@ pub fn call_variable(context: &Context, name: Symbol) -> Result<MathemaValue, Va
         match eval_algebra(context, var) {
             Ok(ans) => Ok(ans),
             Err(errors) => {
-                let origin = create_algebra_snippet(var).source().into();
-                Err(VarError::Eval { name, origin, errors })
+                Err(VarError::Eval { name, errors })
             }
         }
     } else {
@@ -104,16 +106,11 @@ pub fn mathema_parse(context: &mut Context, input: &str) -> Result<Outcome, Math
 
     let parsebuffer = ParseBuffer::new(buffer);
     let stmt = parsebuffer.parse::<AstStmt>()
-        .map_err(|e| MathemaError::Parser(e))?;
+        .map_err(MathemaError::Parser)?;
 
     match stmt {
         AstStmt::Expr(expr) => {
-            let (alg, span_map) = expr_to_algebra(&expr);
-            let mut snip = SnippetLine::empty();
-            snip.source = input.to_string();
-            snip.span_map = span_map;
-            context.snippets.insert_var(Symbol::intern("ans"), snip);
-
+            let alg = expr_to_algebra(&expr);
             match eval_algebra(context, &alg) {
                 Ok(ans) => {
                     context.set_variable(Symbol::intern("ans"), AlgExpr::Value(Value::Num(ans.clone())));
@@ -126,12 +123,10 @@ pub fn mathema_parse(context: &mut Context, input: &str) -> Result<Outcome, Math
         },
         AstStmt::VarDecl(decl) => {
             let name = decl.var_name.symbol;
-            let (alg, _span_map) = expr_to_algebra(&decl.expr);
-
-            let snip = create_var_decl_snippet(name, &alg);
-            context.snippets.insert_var(name, snip);
+            let alg = expr_to_algebra(&decl.expr);
 
             if is_constant(name.as_str()) {
+                // TODO: change, next reimplementation
                 let span = Span { start: 0, end: name.as_str().len() };
                 let kind = DefErrorKind::ReservedVar(name);
                 let error = DefError { kind, span };
@@ -142,7 +137,7 @@ pub fn mathema_parse(context: &mut Context, input: &str) -> Result<Outcome, Math
         },
         AstStmt::FnDecl(decl) => {
             let name = decl.sig.fn_name.symbol;
-            let (alg, _span_map) = expr_to_algebra(&decl.expr);
+            let alg = expr_to_algebra(&decl.expr);
 
             let arg_vec: Vec<Symbol> = decl.sig.inputs
                 .iter()
@@ -154,9 +149,6 @@ pub fn mathema_parse(context: &mut Context, input: &str) -> Result<Outcome, Math
 
             let name = func.name;
             if is_unary_func(name.as_str()) || is_binary_func(name.as_str()) {
-                let snip = create_function_snippet(&func);
-                // TODO: incorporate this
-                let _source = snip.source();
                 let span = Span { start: 0, end: name.as_str().len() };
                 let kind = DefErrorKind::ReservedFunc(name);
                 let error = DefError { kind, span };

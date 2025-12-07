@@ -2,7 +2,6 @@ pub mod algebra;
 pub mod context;
 pub mod intrinsics;
 pub mod function;
-pub mod snippet;
 pub mod symbol;
 pub mod value;
 pub mod error;
@@ -12,9 +11,9 @@ pub mod parsing;
 #[cfg(test)]
 mod tests {
     use crate::{
-        algebra::{algebra_to_string, AlgExpr, ExprToAlgebra},
+        algebra::{expr_to_algebra, AlgExpr},
         parsing::{
-            ast::{AstExpr, AstVisit},
+            ast::AstExpr,
             lexer::tokenize,
             parser::ParseBuffer
         }
@@ -27,7 +26,7 @@ mod tests {
         }
         let parser = ParseBuffer::new(tokens);
         let expr = parser.parse::<AstExpr>().unwrap();
-        let alg = ExprToAlgebra.visit_expr(&expr);
+        let alg = expr_to_algebra(&expr);
         alg
     }
 

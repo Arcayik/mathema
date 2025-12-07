@@ -1,10 +1,9 @@
 use crate::{
-    algebra::{self, eval_algebra, AlgExpr, EvalError, EvalErrorKind},
+    algebra::{self, AlgExpr, EvalError, EvalErrorKind},
     context::{call_variable, Context, FuncError},
-    intrinsics::{self, call_binary_func, call_unary_func, is_binary_func, is_unary_func},
-    snippet::{create_algebra_snippet, create_function_snippet},
+    intrinsics::{call_binary_func, call_unary_func, is_binary_func, is_unary_func},
+    value::MathemaValue,
     symbol::Symbol,
-    value::MathemaValue
 };
 
 #[derive(Debug)]
@@ -122,12 +121,7 @@ fn eval_user_function(context: &Context, function: &Function, input: &[MathemaVa
                             Ok(ans) => Some(ans),
                             Err(e) => {
                                 let kind = EvalErrorKind::BadVar(e);
-                                let snip = create_function_snippet(function);
-                                let source = snip.source().into();
-                                let span = snip.get_span(algebra).unwrap();
-                                let error = EvalError {
-                                    kind, source, span
-                                };
+                                let error = EvalError { kind };
                                 errors.push(error);
                                 None
                             }
@@ -169,14 +163,8 @@ fn eval_user_function(context: &Context, function: &Function, input: &[MathemaVa
                 match call_function(context, fc.name, &args) {
                     Ok(ans) => Some(ans),
                     Err(e) => {
-                        let snip = create_algebra_snippet(&function.body);
-                        let source = snip.source();
-                        let span = snip.get_span(algebra).unwrap();
-                        let error = EvalError {
-                            kind: EvalErrorKind::BadFnCall(e),
-                            source: source.into(),
-                            span,
-                        };
+                        let kind = EvalErrorKind::BadFnCall(e);
+                        let error = EvalError { kind };
                         errors.push(error);
                         None
                     }
@@ -191,12 +179,10 @@ fn eval_user_function(context: &Context, function: &Function, input: &[MathemaVa
     if args_off != 0 {
         return Err(FuncError::BadArgs(name, args_off))
     }
-
-    let origin = create_function_snippet(&function).source().into();
      
     let mut errors = Vec::new();
     let result = recurse(context, function, input, &function.body, &mut errors);
-    result.ok_or(FuncError::Eval { name, origin, errors })
+    result.ok_or(FuncError::Eval { name, errors })
 }
 
 pub fn call_function(context: &Context, name: Symbol, input: &[MathemaValue]) -> Result<MathemaValue, FuncError> {

@@ -1,3 +1,5 @@
+#![allow(clippy::should_implement_trait)]
+
 use rug::{ops::{NegAssign, Pow}, Float};
 
 #[macro_export]

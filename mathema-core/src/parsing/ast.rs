@@ -1,4 +1,4 @@
-use crate::algebra::{AlgBinOp, AlgExpr};
+use crate::algebra::ast::{AlgBinOp, AlgExpr};
 
 use super::{
     lexer::LexToken,

@@ -1,5 +1,7 @@
 use mathema_core::{
-    algebra::{EvalError, EvalErrorKind}, context::{Context, DefError, DefErrorKind, FuncError, VarError}, parsing::{
+    algebra::eval::{EvalError, EvalErrorKind},
+    context::{Context, DefError, DefErrorKind, FuncError, VarError},
+    parsing::{
         lexer::LexError,
         parser::ParseError,
     } 
@@ -25,8 +27,7 @@ impl ErrorDisplay for EvalError {
     fn display(&self, context: &Context) -> String {
         match &self.kind {
             EvalErrorKind::BadVar(e) => {
-                let var_err = e.display(context);
-                format!("{var_err}")
+                e.display(context)
             },
             EvalErrorKind::BadFnCall(e) => {
                 let func_err = e.display(context);

@@ -1,0 +1,243 @@
+use crate::{
+    parsing::{
+        ast::{AstExpr, AstValue, BinOp, UnaryOp},
+    },
+    symbol::Symbol,
+    value::MathemaValue,
+    float,
+};
+
+#[derive(Clone, Debug, PartialEq)]
+pub enum AlgExpr {
+    Value(Value),
+    Binary(Binary),
+    Unary(Unary),
+    FnCall(FnCall),
+}
+
+impl From<Value> for AlgExpr {
+    fn from(value: Value) -> Self {
+        Self::Value(value)
+    }
+}
+
+impl From<MathemaValue> for AlgExpr {
+    fn from(value: MathemaValue) -> Self {
+        Value::Num(value).into()
+    }
+}
+
+impl From<Symbol> for AlgExpr {
+    fn from(value: Symbol) -> Self {
+        Value::Var(value).into()
+    }
+}
+
+impl From<Binary> for AlgExpr {
+    fn from(value: Binary) -> Self {
+        Self::Binary(value)
+    }
+}
+
+impl From<Unary> for AlgExpr {
+    fn from(value: Unary) -> Self {
+        Self::Unary(value)
+    }
+}
+
+impl From<FnCall> for AlgExpr {
+    fn from(value: FnCall) -> Self {
+        Self::FnCall(value)
+    }
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub enum Value {
+    Num(MathemaValue),
+    Var(Symbol),
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub struct Binary {
+    pub(crate) left: Box<AlgExpr>,
+    pub(crate) op: AlgBinOp,
+    pub(crate) right: Box<AlgExpr>,
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub enum AlgBinOp { Add, Sub, Mul, Div, Exp }
+
+impl std::fmt::Display for AlgBinOp {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Add => write!(f, "+"),
+            Self::Sub => write!(f, "-"),
+            Self::Mul => write!(f, "*"),
+            Self::Div => write!(f, "/"),
+            Self::Exp => write!(f, "^"),
+        }
+    }
+}
+
+impl AlgBinOp {
+    pub fn is_additive(&self) -> bool {
+        matches!(self, AlgBinOp::Add | AlgBinOp::Sub)
+    }
+
+    pub fn is_multiplicative(&self) -> bool {
+        matches!(self, AlgBinOp::Mul | AlgBinOp::Div)
+    }
+}
+
+impl From<BinOp> for AlgBinOp {
+    fn from(value: BinOp) -> Self {
+        match value {
+            BinOp::Add(_) => Self::Add,
+            BinOp::Sub(_) => Self::Sub,
+            BinOp::Mul(_) => Self::Mul,
+            BinOp::Div(_) => Self::Div,
+            BinOp::Exp(_) => Self::Exp,
+        }
+    }
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub struct Unary {
+    pub(crate) op: AlgUnaryOp,
+    pub(crate) expr: Box<AlgExpr>,
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub enum AlgUnaryOp { Neg }
+
+impl std::fmt::Display for AlgUnaryOp {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Neg => write!(f, "-")
+        }
+    }
+}
+
+impl From<UnaryOp> for AlgUnaryOp {
+    fn from(value: UnaryOp) -> Self {
+        match value {
+            UnaryOp::Neg(_) => AlgUnaryOp::Neg,
+        }
+    }
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub struct FnCall {
+    pub(crate) name: Symbol,
+    pub(crate) args: Vec<AlgExpr>,
+}
+
+pub fn expr_to_algebra(ast: &AstExpr) -> AlgExpr {
+    fn recurse(ast: &AstExpr) -> AlgExpr {
+        match ast {
+            AstExpr::Value(v) => {
+                match v {
+                    AstValue::Literal(l) => Value::Num(float!(l.num)),
+                    AstValue::Ident(id) => Value::Var(id.symbol)
+                }.into()
+            },
+            AstExpr::Unary(u) => {
+                let expr_node = recurse(&u.expr);
+                Unary {
+                    op: u.op.clone().into(),
+                    expr: Box::new(expr_node)
+                }.into()
+            },
+            AstExpr::Binary(b) => {
+                let left = recurse(&b.lhs);
+                let right = recurse(&b.rhs);
+
+                Binary {
+                    left: Box::new(left),
+                    op: b.op.clone().into(),
+                    right: Box::new(right),
+                }.into()
+            },
+            AstExpr::Group(g) => {
+                recurse(&g.expr)
+            },
+            AstExpr::FnCall(f) => {
+                let args: Vec<AlgExpr> = f.inputs.iter()
+                    .map(recurse)
+                    .collect();
+
+                FnCall {
+                    args,
+                    name: f.fn_name.symbol
+                }.into()
+            }
+        }
+    }
+
+    recurse(ast)
+}
+
+pub trait AlgebraVisit {
+    type Result;
+
+    fn visit_expr(&mut self, node: &AlgExpr) -> Self::Result;
+    fn visit_value(&mut self, node: &Value) -> Self::Result;
+    fn visit_binary(&mut self, node: &Binary) -> Self::Result;
+    fn visit_unary(&mut self, node: &Unary) -> Self::Result;
+    fn visit_fn_call(&mut self, node: &FnCall) -> Self::Result;
+}
+
+pub mod visit {
+    use super::{AlgExpr, AlgebraVisit, Unary};
+
+    pub fn walk_expr<V: AlgebraVisit + ?Sized>(visitor: &mut V, expr: &AlgExpr) -> V::Result {
+        match expr {
+            AlgExpr::Value(e) => visitor.visit_value(e),
+            AlgExpr::Unary(e) => visitor.visit_unary(e),
+            AlgExpr::Binary(e) => visitor.visit_binary(e),
+            AlgExpr::FnCall(e) => visitor.visit_fn_call(e),
+        }
+    }
+
+    pub fn walk_unary<V: AlgebraVisit + ?Sized>(visitor: &mut V, unary: &Unary) -> V::Result {
+        visitor.visit_expr(&unary.expr)
+    }
+}
+
+pub trait AlgebraFold {
+    fn fold_expr(&mut self, expr: AlgExpr) -> AlgExpr {
+        match expr {
+            AlgExpr::Value(v) => self.fold_value(v).into(),
+            AlgExpr::Unary(u) => self.fold_unary(u).into(),
+            AlgExpr::Binary(b) => self.fold_binary(b).into(),
+            AlgExpr::FnCall(f) => self.fold_fn_call(f).into()
+        }
+    }
+
+    fn fold_value(&mut self, value: Value) -> Value {
+        value
+    }
+
+    fn fold_binary(&mut self, binary: Binary) -> Binary {
+        let left = Box::new(self.fold_expr(*binary.left));
+        let op = binary.op;
+        let right = Box::new(self.fold_expr(*binary.right));
+        Binary { left, op, right, }
+    }
+
+    fn fold_unary(&mut self, unary: Unary) -> Unary {
+        let op = unary.op;
+        let expr = unary.expr;
+        Unary { op, expr }
+    }
+
+    fn fold_fn_call(&mut self, fn_call: FnCall) -> FnCall {
+        let args = fn_call.args
+            .into_iter()
+            .map(|a| self.fold_expr(a))
+            .collect();
+        let func = fn_call.name;
+        FnCall { args, name: func }
+    }
+}
+

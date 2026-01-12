@@ -1,5 +1,8 @@
 use crate::{
-    algebra::{self, AlgExpr, EvalError, EvalErrorKind},
+    algebra::{
+        ast::{AlgExpr, AlgUnaryOp, AlgBinOp, Value},
+        eval::{EvalError, EvalErrorKind}
+    },
     context::{call_variable, Context, FuncError},
     intrinsics::{call_binary_func, call_unary_func, is_binary_func, is_unary_func},
     value::MathemaValue,
@@ -112,8 +115,8 @@ fn eval_user_function(context: &Context, function: &Function, input: &[MathemaVa
     ) -> Option<MathemaValue> {
         match algebra {
             AlgExpr::Value(val) => match val {
-                algebra::Value::Num(num) => Some(num.clone()),
-                algebra::Value::Var(var) => {
+                Value::Num(num) => Some(num.clone()),
+                Value::Var(var) => {
                     if let Some(idx) = function.args.idx_of(*var) {
                         Some(input[idx].clone())
                     } else {
@@ -132,7 +135,7 @@ fn eval_user_function(context: &Context, function: &Function, input: &[MathemaVa
             AlgExpr::Unary(un) => {
                 if let Some(val) = recurse(context, function, input, &un.expr, errors) {
                     match un.op {
-                        algebra::AlgUnaryOp::Neg => Some(val.neg()),
+                        AlgUnaryOp::Neg => Some(val.neg()),
                     }
                 } else {
                     None
@@ -144,11 +147,11 @@ fn eval_user_function(context: &Context, function: &Function, input: &[MathemaVa
 
                 if let (Some(l), Some(r)) = (left, right) {
                     match bin.op {
-                        algebra::AlgBinOp::Add => Some(l.add(&r)),
-                        algebra::AlgBinOp::Sub => Some(l.sub(&r)),
-                        algebra::AlgBinOp::Mul => Some(l.mul(&r)),
-                        algebra::AlgBinOp::Div => Some(l.div(&r)),
-                        algebra::AlgBinOp::Exp => Some(l.pow(&r)),
+                        AlgBinOp::Add => Some(l.add(&r)),
+                        AlgBinOp::Sub => Some(l.sub(&r)),
+                        AlgBinOp::Mul => Some(l.mul(&r)),
+                        AlgBinOp::Div => Some(l.div(&r)),
+                        AlgBinOp::Exp => Some(l.pow(&r)),
                     }
                 } else {
                     None

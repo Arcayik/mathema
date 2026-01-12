@@ -1,13 +1,16 @@
 use std::collections::HashMap;
 
 use crate::{
-    algebra::{eval_algebra, expr_to_algebra, AlgExpr, EvalError, Value},
     function::{FnArgs, Function},
     intrinsics::{self, is_binary_func, is_constant, is_unary_func},
     parsing::{
         ast::AstStmt,
         lexer::tokenize,
         parser::ParseBuffer, token::Span,
+    },
+    algebra::{
+        eval::{eval_algebra, EvalError},
+        ast::{expr_to_algebra, AlgExpr, Value}
     },
     value::MathemaValue,
     error::MathemaError,

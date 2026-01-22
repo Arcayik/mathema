@@ -1,34 +1,27 @@
 use std::collections::HashMap;
 
 use crate::{
-    function::{FnArgs, Function},
-    intrinsics::{self, is_binary_func, is_constant, is_unary_func},
-    parsing::{
+    algebra::{
+        ast::{expr_to_algebra, AlgExpr, AlgebraTree, Value}, eval::{eval_algebra, EvalError}
+    }, error::MathemaError, function::{FnArgs, Function}, intrinsics::{self, is_binary_func, is_constant, is_unary_func}, parsing::{
         ast::AstStmt,
         lexer::tokenize,
         parser::ParseBuffer, token::Span,
-    },
-    algebra::{
-        eval::{eval_algebra, EvalError},
-        ast::{expr_to_algebra, AlgExpr, Value}
-    },
-    value::MathemaValue,
-    error::MathemaError,
-    symbol::Symbol,
+    }, symbol::Symbol, value::MathemaValue
 };
 
 #[derive(Default)]
 pub struct Context {
-    variables: HashMap<Symbol, AlgExpr>,
+    variables: HashMap<Symbol, AlgebraTree>,
     functions: HashMap<Symbol, Function>,
 }
 
 impl Context {
-    pub fn set_variable(&mut self, name: Symbol, value: AlgExpr) {
+    pub fn set_variable(&mut self, name: Symbol, value: AlgebraTree) {
         self.variables.insert(name, value);
     }
 
-    pub fn get_variable(&self, name: Symbol) -> Option<&AlgExpr> {
+    pub fn get_variable(&self, name: Symbol) -> Option<&AlgebraTree> {
         self.variables.get(&name)
     }
 
@@ -116,7 +109,9 @@ pub fn mathema_parse(context: &mut Context, input: &str) -> Result<Outcome, Math
             let alg = expr_to_algebra(&expr);
             match eval_algebra(context, &alg) {
                 Ok(ans) => {
-                    context.set_variable(Symbol::intern("ans"), AlgExpr::Value(Value::Num(ans.clone())));
+                    let mut var_tree = AlgebraTree::new();
+                    var_tree.add_node(AlgExpr::Value(Value::Num(ans.clone())));
+                    context.set_variable(Symbol::intern("ans"), var_tree);
                     Ok(Outcome::Answer(ans))
                 },
                 Err(e) => {

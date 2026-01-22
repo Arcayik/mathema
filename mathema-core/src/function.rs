@@ -1,24 +1,19 @@
 use crate::{
     algebra::{
-        ast::{AlgExpr, AlgUnaryOp, AlgBinOp, Value},
+        ast::{AlgBinOp, AlgExpr, AlgUnaryOp, AlgebraTree, Value},
         eval::{EvalError, EvalErrorKind}
-    },
-    context::{call_variable, Context, FuncError},
-    intrinsics::{call_binary_func, call_unary_func, is_binary_func, is_unary_func},
-    value::MathemaValue,
-    symbol::Symbol,
+    }, context::{call_variable, Context, FuncError}, intrinsics::{call_binary_func, call_unary_func, is_binary_func, is_unary_func}, symbol::Symbol, value::MathemaValue
 };
 
 #[derive(Debug)]
 pub struct Function {
     pub(crate) name: Symbol,
     pub(crate) args: FnArgs,
-    pub(crate) body: Box<AlgExpr>,
+    pub(crate) body: AlgebraTree,
 }
 
 impl Function {
-    pub fn new(name: Symbol, algebra: AlgExpr, args: FnArgs) -> Self {
-        let body = Box::new(algebra);
+    pub fn new(name: Symbol, body: AlgebraTree, args: FnArgs) -> Self {
         Function { name, args, body }
     }
 
@@ -106,6 +101,8 @@ impl std::fmt::Display for ArgInUse {
 impl std::error::Error for ArgInUse {}
 
 fn eval_user_function(context: &Context, function: &Function, input: &[MathemaValue]) -> Result<MathemaValue, FuncError> {
+    todo!();
+    /*
     fn recurse(
         context: &Context,
         function: &Function,
@@ -186,6 +183,7 @@ fn eval_user_function(context: &Context, function: &Function, input: &[MathemaVa
     let mut errors = Vec::new();
     let result = recurse(context, function, input, &function.body, &mut errors);
     result.ok_or(FuncError::Eval { name, errors })
+    */
 }
 
 pub fn call_function(context: &Context, name: Symbol, input: &[MathemaValue]) -> Result<MathemaValue, FuncError> {

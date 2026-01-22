@@ -1,18 +1,103 @@
 use crate::{
-    parsing::{
-        ast::{AstExpr, AstValue, BinOp, UnaryOp},
-    },
-    symbol::Symbol,
-    value::MathemaValue,
     float,
+    parsing::ast::{AstBinary, AstExpr, AstFnCall, AstGroup, AstUnary, AstValue, BinOp, UnaryOp},
+    symbol::Symbol,
+    value::MathemaValue
 };
+
+#[derive(Debug)]
+pub struct AlgebraTree {
+    nodes: Vec<AlgExpr>
+}
+
+pub type NodeIdx = usize;
+
+impl AlgebraTree {
+    pub fn new() -> Self {
+        AlgebraTree {
+            nodes: Vec::new()
+        }
+    }
+
+    pub fn add_node(&mut self, node: AlgExpr) -> NodeIdx {
+        let idx = self.nodes.len();
+        self.nodes.push(node);
+        idx
+    }
+
+    fn get_node(&self, idx: NodeIdx) -> Option<&AlgExpr> {
+        self.nodes.get(idx)
+    }
+
+    fn get_node_mut(&mut self, idx: NodeIdx) -> Option<&mut AlgExpr> {
+        self.nodes.get_mut(idx)
+    }
+
+    fn num_nodes(&self) -> usize {
+        self.nodes.len()
+    }
+}
+
+pub fn expr_to_algebra(ast: &AstExpr) -> AlgebraTree {
+    let mut tree = AlgebraTree::new();
+    parse_ast(ast, &mut tree);
+    tree
+}
+
+pub fn parse_ast(ast: &AstExpr, tree: &mut AlgebraTree) -> NodeIdx {
+    match ast {
+        AstExpr::Value(v) => parse_value(v, tree),
+        AstExpr::Unary(u) => parse_unary(u, tree),
+        AstExpr::Binary(b) => parse_binary(b, tree),
+        AstExpr::Group(g) => parse_group(g, tree),
+        AstExpr::FnCall(f) => parse_fn_call(f, tree),
+    }
+}
+
+pub fn parse_value(value: &AstValue, tree: &mut AlgebraTree) -> NodeIdx {
+    tree.add_node(AlgExpr::Value(value.into()))
+}
+
+pub fn parse_unary(unary: &AstUnary, tree: &mut AlgebraTree) -> NodeIdx {
+    let alg = AlgExpr::Unary {
+        op: unary.op.clone().into(),
+        inner: parse_ast(&unary.expr, tree)
+    };
+    tree.add_node(alg)
+}
+
+pub fn parse_binary(binary: &AstBinary, tree: &mut AlgebraTree) -> NodeIdx {
+    let alg = AlgExpr::Binary {
+        left: parse_ast(&binary.lhs, tree),
+        op: binary.op.clone().into(),
+        right: parse_ast(&binary.rhs, tree)
+    };
+    tree.add_node(alg)
+}
+
+pub fn parse_group(group: &AstGroup, tree: &mut AlgebraTree) -> NodeIdx {
+    parse_ast(&group.expr, tree)
+}
+
+pub fn parse_fn_call(fn_call: &AstFnCall, tree: &mut AlgebraTree) -> NodeIdx {
+    let args = fn_call.inputs
+        .iter()
+        .map(|ast| parse_ast(ast, tree))
+        .collect();
+
+    let alg = AlgExpr::FnCall {
+        name: fn_call.fn_name.symbol,
+        args
+    };
+    tree.add_node(alg)
+}
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum AlgExpr {
     Value(Value),
-    Binary(Binary),
-    Unary(Unary),
-    FnCall(FnCall),
+    Binary { left: NodeIdx, op: AlgBinOp, right: NodeIdx },
+    Unary { op: AlgUnaryOp, inner: NodeIdx},
+    FnCall { name: Symbol, args: Vec<NodeIdx> },
 }
 
 impl From<Value> for AlgExpr {
@@ -33,35 +118,19 @@ impl From<Symbol> for AlgExpr {
     }
 }
 
-impl From<Binary> for AlgExpr {
-    fn from(value: Binary) -> Self {
-        Self::Binary(value)
-    }
-}
-
-impl From<Unary> for AlgExpr {
-    fn from(value: Unary) -> Self {
-        Self::Unary(value)
-    }
-}
-
-impl From<FnCall> for AlgExpr {
-    fn from(value: FnCall) -> Self {
-        Self::FnCall(value)
-    }
-}
-
 #[derive(Clone, Debug, PartialEq)]
 pub enum Value {
     Num(MathemaValue),
     Var(Symbol),
 }
 
-#[derive(Clone, Debug, PartialEq)]
-pub struct Binary {
-    pub(crate) left: Box<AlgExpr>,
-    pub(crate) op: AlgBinOp,
-    pub(crate) right: Box<AlgExpr>,
+impl From<&AstValue> for Value {
+    fn from(value: &AstValue) -> Self {
+        match value {
+            AstValue::Ident(i) => Value::Var(i.symbol),
+            AstValue::Literal(l) => Value::Num(float!(l.num))
+        }
+    }
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -102,12 +171,6 @@ impl From<BinOp> for AlgBinOp {
 }
 
 #[derive(Clone, Debug, PartialEq)]
-pub struct Unary {
-    pub(crate) op: AlgUnaryOp,
-    pub(crate) expr: Box<AlgExpr>,
-}
-
-#[derive(Clone, Debug, PartialEq)]
 pub enum AlgUnaryOp { Neg }
 
 impl std::fmt::Display for AlgUnaryOp {
@@ -126,118 +189,13 @@ impl From<UnaryOp> for AlgUnaryOp {
     }
 }
 
-#[derive(Clone, Debug, PartialEq)]
-pub struct FnCall {
-    pub(crate) name: Symbol,
-    pub(crate) args: Vec<AlgExpr>,
-}
+#[cfg(test)]
+mod tests {
+    use crate::{algebra::ast::expr_to_algebra, parsing::{ast::{AstExpr, AstValue}, token::Ident}, symbol::Symbol};
 
-pub fn expr_to_algebra(ast: &AstExpr) -> AlgExpr {
-    fn recurse(ast: &AstExpr) -> AlgExpr {
-        match ast {
-            AstExpr::Value(v) => {
-                match v {
-                    AstValue::Literal(l) => Value::Num(float!(l.num)),
-                    AstValue::Ident(id) => Value::Var(id.symbol)
-                }.into()
-            },
-            AstExpr::Unary(u) => {
-                let expr_node = recurse(&u.expr);
-                Unary {
-                    op: u.op.clone().into(),
-                    expr: Box::new(expr_node)
-                }.into()
-            },
-            AstExpr::Binary(b) => {
-                let left = recurse(&b.lhs);
-                let right = recurse(&b.rhs);
-
-                Binary {
-                    left: Box::new(left),
-                    op: b.op.clone().into(),
-                    right: Box::new(right),
-                }.into()
-            },
-            AstExpr::Group(g) => {
-                recurse(&g.expr)
-            },
-            AstExpr::FnCall(f) => {
-                let args: Vec<AlgExpr> = f.inputs.iter()
-                    .map(recurse)
-                    .collect();
-
-                FnCall {
-                    args,
-                    name: f.fn_name.symbol
-                }.into()
-            }
-        }
-    }
-
-    recurse(ast)
-}
-
-pub trait AlgebraVisit {
-    type Result;
-
-    fn visit_expr(&mut self, node: &AlgExpr) -> Self::Result;
-    fn visit_value(&mut self, node: &Value) -> Self::Result;
-    fn visit_binary(&mut self, node: &Binary) -> Self::Result;
-    fn visit_unary(&mut self, node: &Unary) -> Self::Result;
-    fn visit_fn_call(&mut self, node: &FnCall) -> Self::Result;
-}
-
-pub mod visit {
-    use super::{AlgExpr, AlgebraVisit, Unary};
-
-    pub fn walk_expr<V: AlgebraVisit + ?Sized>(visitor: &mut V, expr: &AlgExpr) -> V::Result {
-        match expr {
-            AlgExpr::Value(e) => visitor.visit_value(e),
-            AlgExpr::Unary(e) => visitor.visit_unary(e),
-            AlgExpr::Binary(e) => visitor.visit_binary(e),
-            AlgExpr::FnCall(e) => visitor.visit_fn_call(e),
-        }
-    }
-
-    pub fn walk_unary<V: AlgebraVisit + ?Sized>(visitor: &mut V, unary: &Unary) -> V::Result {
-        visitor.visit_expr(&unary.expr)
+    #[test]
+    fn single_expr() {
+        let ast = AstExpr::Value(AstValue::Ident(Ident { symbol: Symbol::intern("x"), span: (0,1).into() }));
+        let tree = expr_to_algebra(&ast);
     }
 }
-
-pub trait AlgebraFold {
-    fn fold_expr(&mut self, expr: AlgExpr) -> AlgExpr {
-        match expr {
-            AlgExpr::Value(v) => self.fold_value(v).into(),
-            AlgExpr::Unary(u) => self.fold_unary(u).into(),
-            AlgExpr::Binary(b) => self.fold_binary(b).into(),
-            AlgExpr::FnCall(f) => self.fold_fn_call(f).into()
-        }
-    }
-
-    fn fold_value(&mut self, value: Value) -> Value {
-        value
-    }
-
-    fn fold_binary(&mut self, binary: Binary) -> Binary {
-        let left = Box::new(self.fold_expr(*binary.left));
-        let op = binary.op;
-        let right = Box::new(self.fold_expr(*binary.right));
-        Binary { left, op, right, }
-    }
-
-    fn fold_unary(&mut self, unary: Unary) -> Unary {
-        let op = unary.op;
-        let expr = unary.expr;
-        Unary { op, expr }
-    }
-
-    fn fold_fn_call(&mut self, fn_call: FnCall) -> FnCall {
-        let args = fn_call.args
-            .into_iter()
-            .map(|a| self.fold_expr(a))
-            .collect();
-        let func = fn_call.name;
-        FnCall { args, name: func }
-    }
-}
-

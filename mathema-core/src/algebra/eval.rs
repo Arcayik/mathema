@@ -1,10 +1,6 @@
 use crate::{
-    context::{call_variable, Context, FuncError, VarError},
-    function::call_function,
-    value::MathemaValue,
+    algebra::ast::AlgebraTree, context::{call_variable, Context, FuncError, VarError}, function::call_function, value::MathemaValue
 };
-
-use super::ast::{AlgExpr, Value, AlgUnaryOp, AlgBinOp};
 
 #[derive(Debug)]
 pub enum EvalErrorKind {
@@ -17,7 +13,9 @@ pub struct EvalError {
     pub kind: EvalErrorKind,
 }
 
-pub fn eval_algebra(context: &Context, algebra: &AlgExpr) -> Result<MathemaValue, Vec<EvalError>> {
+pub fn eval_algebra(context: &Context, algebra: &AlgebraTree) -> Result<MathemaValue, Vec<EvalError>> {
+    todo!()
+/* TODO
     fn recurse(
         context: &Context,
         algebra: &AlgExpr,
@@ -88,5 +86,6 @@ pub fn eval_algebra(context: &Context, algebra: &AlgExpr) -> Result<MathemaValue
     } else {
         Err(errors)
     }
+*/
 }
 

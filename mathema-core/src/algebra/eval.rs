@@ -1,5 +1,8 @@
 use crate::{
-    algebra::ast::AlgebraTree, context::{call_variable, Context, FuncError, VarError}, function::call_function, value::MathemaValue
+    algebra::ast::{AlgBinOp, AlgExpr, AlgUnaryOp, NodeIdx, TreeVisitor, Value},
+    context::{call_variable, Context, FuncError, VarError},
+    function::call_function,
+    value::MathemaValue,
 };
 
 #[derive(Debug)]
@@ -13,15 +16,24 @@ pub struct EvalError {
     pub kind: EvalErrorKind,
 }
 
-pub fn eval_algebra(context: &Context, algebra: &AlgebraTree) -> Result<MathemaValue, Vec<EvalError>> {
-    todo!()
-/* TODO
+pub struct Evaluate<'c>(pub &'c Context);
+
+impl TreeVisitor for Evaluate<'_> {
+    type Output = Result<MathemaValue, Vec<EvalError>>;
+    fn visit_tree(&self, nodes: &[AlgExpr], start_idx: NodeIdx) -> Self::Output {
+        evaluate_tree(self.0, nodes, start_idx)
+    }
+}
+
+fn evaluate_tree(context: &Context, nodes: &[AlgExpr], start_idx: NodeIdx) -> Result<MathemaValue, Vec<EvalError>> {
     fn recurse(
         context: &Context,
-        algebra: &AlgExpr,
+        nodes: &[AlgExpr],
+        idx: NodeIdx,
         errors: &mut Vec<EvalError>
     ) -> Option<MathemaValue> {
-        match algebra {
+        let alg = &nodes[idx];
+        match alg {
             AlgExpr::Value(val) => match val {
                 Value::Num(num) => Some(num.clone()),
                 Value::Var(var) => {
@@ -35,21 +47,21 @@ pub fn eval_algebra(context: &Context, algebra: &AlgebraTree) -> Result<MathemaV
                     }
                 }
             },
-            AlgExpr::Unary(un) => {
-                if let Some(val) = recurse(context, &un.expr, errors) {
-                    match un.op {
+            AlgExpr::Unary { op, inner } => {
+                if let Some(val) = recurse(context, nodes, *inner, errors) {
+                    match op {
                         AlgUnaryOp::Neg => Some(val.neg())
                     }
                 } else {
                     None
                 }
             },
-            AlgExpr::Binary(bin) => {
-                let left = recurse(context, &bin.left, errors);
-                let right = recurse(context, &bin.right, errors);
+            AlgExpr::Binary { left, op, right } => {
+                let left = recurse(context, nodes, *left, errors);
+                let right = recurse(context, nodes, *right, errors);
 
                 if let (Some(l), Some(r)) = (left, right) {
-                    match bin.op {
+                    match op {
                         AlgBinOp::Add => Some(l.add(&r)),
                         AlgBinOp::Sub => Some(l.sub(&r)),
                         AlgBinOp::Mul => Some(l.mul(&r)),
@@ -60,13 +72,13 @@ pub fn eval_algebra(context: &Context, algebra: &AlgebraTree) -> Result<MathemaV
                     None
                 }
             },
-            AlgExpr::FnCall(fc) => {
-                let args: Vec<MathemaValue> = fc.args
+            AlgExpr::FnCall { name, args } => {
+                let args: Vec<MathemaValue> = args
                     .iter()
-                    .map(|a| recurse(context, a, errors))
+                    .map(|arg| recurse(context, nodes, *arg, errors))
                     .collect::<Option<_>>()?;
 
-                match call_function(context, fc.name, &args) {
+                match call_function(context, *name, &args) {
                     Ok(ans) => Some(ans),
                     Err(e) => {
                         let kind = EvalErrorKind::BadFnCall(e);
@@ -80,12 +92,11 @@ pub fn eval_algebra(context: &Context, algebra: &AlgebraTree) -> Result<MathemaV
     }
 
     let mut errors = Vec::new();
-    let result = recurse(context, algebra, &mut errors);
+    let result = recurse(context, nodes, start_idx, &mut errors);
     if let Some(ans) = result {
         Ok(ans)
     } else {
         Err(errors)
     }
-*/
 }
 

@@ -2,12 +2,20 @@ use std::collections::HashMap;
 
 use crate::{
     algebra::{
-        ast::{expr_to_algebra, AlgExpr, AlgebraTree, Value}, eval::{eval_algebra, EvalError}
-    }, error::MathemaError, function::{FnArgs, Function}, intrinsics::{self, is_binary_func, is_constant, is_unary_func}, parsing::{
+        ast::{expr_to_algebra, AlgebraTree},
+        eval::{EvalError, Evaluate}
+    },
+    intrinsics::{self, is_binary_func, is_constant, is_unary_func},
+    parsing::{
         ast::AstStmt,
         lexer::tokenize,
-        parser::ParseBuffer, token::Span,
-    }, symbol::Symbol, value::MathemaValue
+        parser::ParseBuffer,
+        token::Span,
+    },
+    error::MathemaError,
+    function::{FnArgs, Function},
+    symbol::Symbol,
+    value::MathemaValue
 };
 
 #[derive(Default)]
@@ -82,8 +90,8 @@ pub enum Outcome {
 pub fn call_variable(context: &Context, name: Symbol) -> Result<MathemaValue, VarError> {
     if is_constant(name.as_str()) {
         Ok(intrinsics::CONSTANTS[name.as_str()].clone())
-    } else if let Some(var) = context.get_variable(name) {
-        match eval_algebra(context, var) {
+    } else if let Some(var_alg) = context.get_variable(name) {
+        match var_alg.accept(Evaluate(context)) {
             Ok(ans) => Ok(ans),
             Err(errors) => {
                 Err(VarError::Eval { name, errors })
@@ -107,11 +115,9 @@ pub fn mathema_parse(context: &mut Context, input: &str) -> Result<Outcome, Math
     match stmt {
         AstStmt::Expr(expr) => {
             let alg = expr_to_algebra(&expr);
-            match eval_algebra(context, &alg) {
+            match alg.accept(Evaluate(context)) {
                 Ok(ans) => {
-                    let mut var_tree = AlgebraTree::new();
-                    var_tree.add_node(AlgExpr::Value(Value::Num(ans.clone())));
-                    context.set_variable(Symbol::intern("ans"), var_tree);
+                    context.set_variable(Symbol::intern("ans"), alg);
                     Ok(Outcome::Answer(ans))
                 },
                 Err(e) => {

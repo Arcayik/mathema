@@ -11,7 +11,7 @@ pub mod parsing;
 #[cfg(test)]
 mod tests {
     use crate::{
-        algebra::{expr_to_algebra, AlgExpr},
+        algebra::ast::{expr_to_algebra, AlgebraTree},
         parsing::{
             ast::AstExpr,
             lexer::tokenize,
@@ -19,7 +19,7 @@ mod tests {
         }
     };
 
-    fn parse(input: &'static str) -> AlgExpr {
+    fn parse(input: &'static str) -> AlgebraTree {
         let (tokens, errors) = tokenize(input);
         if !errors.is_empty() {
             panic!("tokenize failed");
@@ -32,7 +32,8 @@ mod tests {
 
     fn alg_str(input: &'static str) -> String {
         let alg = parse(input);
-        algebra_to_string(&alg).source
+        todo!()
+        // algebra_to_string(&alg).source
     }
 
     #[test]

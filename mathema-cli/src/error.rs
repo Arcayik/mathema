@@ -55,13 +55,13 @@ impl ErrorDisplay for VarError {
 impl ErrorDisplay for FuncError {
     fn display(&self, context: &Context) -> String {
         match self {
-            FuncError::Eval { name, errors } => {
+            FuncError::Eval(errors) => {
                 let err = errors.first().unwrap().display(context);
-                format!("in func {name}: {err}")
+                format!("in func: {err}")
             },
-            FuncError::BadArgs(name, off) => {
+            FuncError::BadArgs(off) => {
                 let many_few = if *off > 0 { "many" } else { "few" };
-                format!("in func {name}: {off} too {many_few} args")
+                format!("in func: {off} too {many_few} args")
             },
             FuncError::NotDefined(name) => {
                 format!("Undefined func: {name}")

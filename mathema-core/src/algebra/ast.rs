@@ -39,7 +39,8 @@ impl AlgebraTree {
 
 pub fn expr_to_algebra(ast: &AstExpr) -> AlgebraTree {
     let mut tree = AlgebraTree::empty();
-    parse_ast(ast, &mut tree);
+    let root = parse_ast(ast, &mut tree);
+    tree.root = root;
     tree
 }
 

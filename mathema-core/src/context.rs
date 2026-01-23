@@ -13,7 +13,7 @@ use crate::{
         token::Span,
     },
     error::MathemaError,
-    function::{FnArgs, Function},
+    function::{FnParams, Function},
     symbol::Symbol,
     value::MathemaValue
 };
@@ -37,8 +37,8 @@ impl Context {
         self.variables.contains_key(&name)
     }
 
-    pub fn set_function(&mut self, name: Symbol, body: Function) {
-        self.functions.insert(name, body);
+    pub fn set_function(&mut self, name: Symbol, func: Function) {
+        self.functions.insert(name, func);
     }
 
     pub fn get_function(&self, name: Symbol) -> Option<&Function> {
@@ -64,11 +64,8 @@ pub enum DefErrorKind {
 
 #[derive(Debug)]
 pub enum FuncError {
-    BadArgs(Symbol, isize),
-    Eval {
-        name: Symbol,
-        errors: Vec<EvalError>
-    },
+    BadArgs(isize),
+    Eval(Vec<EvalError>),
     NotDefined(Symbol)
 }
 
@@ -147,11 +144,10 @@ pub fn mathema_parse(context: &mut Context, input: &str) -> Result<Outcome, Math
                 .iter()
                 .map(|i| i.symbol)
                 .collect();
-            let args = FnArgs::from_vec(arg_vec);
+            let params = FnParams::from_vec(arg_vec);
 
-            let func = Function::new(name, alg, args);
+            let func = Function::new(alg, params);
 
-            let name = func.name;
             if is_unary_func(name.as_str()) || is_binary_func(name.as_str()) {
                 let span = Span { start: 0, end: name.as_str().len() };
                 let kind = DefErrorKind::ReservedFunc(name);

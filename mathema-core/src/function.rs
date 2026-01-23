@@ -2,9 +2,13 @@ use std::vec::IntoIter;
 
 use crate::{
     algebra::{
-        ast::{AlgBinOp, AlgExpr, AlgUnaryOp, AlgebraTree, NodeIdx, TreeVisitor, Value},
-        eval::{EvalError, EvalErrorKind}
-    }, context::{call_variable, Context, FuncError}, intrinsics::{call_binary_func, call_unary_func, is_binary_func, is_unary_func}, symbol::Symbol, value::MathemaValue
+        ast::{AlgExpr, AlgebraTree, NodeIdx, TreeVisitor},
+        eval::{evaluate_tree, EvalError, Evaluate}
+    },
+    context::{Context, FuncError, ValueSource},
+    intrinsics::{call_binary_func, call_unary_func, is_binary_func, is_unary_func},
+    symbol::Symbol,
+    value::MathemaValue
 };
 
 #[derive(Debug)]
@@ -20,6 +24,24 @@ impl Function {
 
     pub fn num_params(&self) -> usize {
         self.params.len()
+    }
+}
+
+#[derive(Clone)]
+pub struct FunctionContext<'c>(&'c Context, &'c FnArgs);
+
+impl ValueSource for FunctionContext<'_> {
+    fn get_variable(&self, name: Symbol) -> Option<&AlgebraTree> {
+        let arg_result = self.1.take_arg(name);
+        if arg_result.is_some() {
+            arg_result
+        } else {
+            self.0.get_variable(name)
+        }
+    }
+
+    fn get_function(&self, name: Symbol) -> Option<&Function> {
+        self.0.get_function(name)
     }
 }
 
@@ -109,132 +131,51 @@ impl std::fmt::Display for ArgInUse {
 
 impl std::error::Error for ArgInUse {}
 
-#[derive(Debug, Clone)]
-pub struct FnArgs(Vec<(Symbol, MathemaValue)>);
+#[derive(Debug)]
+pub struct FnArgs(Vec<(Symbol, AlgebraTree)>);
 
 impl FnArgs {
-    pub fn from_params(params: FnParams, args: Vec<MathemaValue>) -> Self {
+    pub fn from_params(params: FnParams, args: Vec<AlgebraTree>) -> Self {
         let inner = params.into_iter().zip(args).collect();
         FnArgs(inner)
     }
 
-    pub fn get_arg(&self, symbol: Symbol) -> Option<MathemaValue> {
-        self.0.iter()
-            .find(|(s, _)| *s == symbol)
-            .map(|(_, v)| v)
-            .cloned()
+    pub fn take_arg(&self, symbol: Symbol) -> Option<&AlgebraTree> {
+        let idx = self.0.iter().position(|(s, _)| *s == symbol)?;
+        Some(&self.0[idx].1)
     }
 }
 
-pub struct EvaluateWithArgs<'c>(pub &'c Context, FnArgs);
+pub struct EvaluateWithArgs<'c>(&'c dyn ValueSource);
 
 impl TreeVisitor for EvaluateWithArgs<'_> {
     type Output = Result<MathemaValue, Vec<EvalError>>;
     fn visit_tree(&self, nodes: &[AlgExpr], start_idx: NodeIdx) -> Self::Output {
-        let Self(context, args) = self;
-        evaluate_tree_with_args(context, args, nodes, start_idx)
+        let context = self.0;
+        evaluate_tree(context, nodes, start_idx)
     }
 }
 
-fn evaluate_tree_with_args(context: &Context, args: &FnArgs, nodes: &[AlgExpr], start_idx: NodeIdx) -> Result<MathemaValue, Vec<EvalError>> {
-    fn recurse(
-        context: &Context,
-        args: &FnArgs,
-        nodes: &[AlgExpr],
-        idx: NodeIdx,
-        errors: &mut Vec<EvalError>
-    ) -> Option<MathemaValue> {
-        let alg = &nodes[idx];
-        match alg {
-            AlgExpr::Value(val) => match val {
-                Value::Num(num) => Some(num.clone()),
-                Value::Var(var) => {
-                    let arg_result = args.get_arg(*var);
-                    if arg_result.is_some() {
-                        arg_result
-                    } else {
-                        match call_variable(context, *var) {
-                            Ok(ans) => Some(ans),
-                            Err(e) => {
-                                let kind = EvalErrorKind::BadVar(e);
-                                errors.push(EvalError { kind });
-                                None
-                            }
-                        }
-                    }
-                }
-            },
-            AlgExpr::Unary { op, inner } => {
-                if let Some(val) = recurse(context, args, nodes, *inner, errors) {
-                    match op {
-                        AlgUnaryOp::Neg => Some(val.neg())
-                    }
-                } else {
-                    None
-                }
-            },
-            AlgExpr::Binary { left, op, right } => {
-                let left = recurse(context, args, nodes, *left, errors);
-                let right = recurse(context, args, nodes, *right, errors);
-
-                if let (Some(l), Some(r)) = (left, right) {
-                    match op {
-                        AlgBinOp::Add => Some(l.add(&r)),
-                        AlgBinOp::Sub => Some(l.sub(&r)),
-                        AlgBinOp::Mul => Some(l.mul(&r)),
-                        AlgBinOp::Div => Some(l.div(&r)),
-                        AlgBinOp::Exp => Some(l.pow(&r)),
-                    }
-                } else {
-                    None
-                }
-            },
-            AlgExpr::FnCall { name, args: these_args } => {
-                let these_args: Vec<MathemaValue> = these_args
-                    .iter()
-                    .map(|arg| recurse(context, args, nodes, *arg, errors))
-                    .collect::<Option<_>>()?;
-
-                match call_function(context, *name, &these_args) {
-                    Ok(ans) => Some(ans),
-                    Err(e) => {
-                        let kind = EvalErrorKind::BadFnCall(e);
-                        let error = EvalError { kind };
-                        errors.push(error);
-                        None
-                    }
-                }
-            }
-        }
-    }
-
-    let mut errors = Vec::new();
-    let result = recurse(context, args, nodes, start_idx, &mut errors);
-    if let Some(ans) = result {
-        Ok(ans)
-    } else {
-        Err(errors)
-    }
-}
-
-fn eval_user_function(context: &Context, function: &Function, input: &[MathemaValue]) -> Result<MathemaValue, FuncError> {
+fn eval_user_function(context: &dyn ValueSource, function: &Function, input: Vec<AlgebraTree>) -> Result<MathemaValue, FuncError> {
     let args_off = input.len() as isize - function.params.len() as isize;
     if args_off != 0 {
         return Err(FuncError::BadArgs(args_off))
     }
      
-    let args = FnArgs::from_params(function.params.clone(), input.to_vec());
-    function.body.accept(EvaluateWithArgs(context, args))
+    function.body.accept(EvaluateWithArgs(context))
         .map_err(FuncError::Eval)
 }
 
-pub fn call_function(context: &Context, name: Symbol, input: &[MathemaValue]) -> Result<MathemaValue, FuncError> {
+pub fn call_function(context: &dyn ValueSource, name: Symbol, input: Vec<AlgebraTree>) -> Result<MathemaValue, FuncError> {
     if let Some(func) = context.get_function(name) {
         eval_user_function(context, func, input)
     } else if is_unary_func(name.as_str()) && input.len() == 1 {
-        call_unary_func(name.as_str(), input[0].clone())
+        let first = input[0].accept(Evaluate(context)).map_err(FuncError::Eval)?;
+        call_unary_func(name.as_str(), first)
     } else if is_binary_func(name.as_str()) && input.len() == 2 {
-        call_binary_func(name.as_str(), input[0].clone(), input[1].clone())
+        let first = input[0].accept(Evaluate(context)).map_err(FuncError::Eval)?;
+        let second = input[1].accept(Evaluate(context)).map_err(FuncError::Eval)?;
+        call_binary_func(name.as_str(), first, second)
     } else {
         Err(FuncError::NotDefined(name))
     }

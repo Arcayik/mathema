@@ -1,7 +1,6 @@
 use crate::{
-    algebra::ast::{AlgBinOp, AlgExpr, AlgUnaryOp, NodeIdx, TreeVisitor, Value},
-    context::{call_variable, Context, FuncError, VarError},
-    function::call_function,
+    algebra::ast::{AlgBinOp, AlgExpr, AlgUnaryOp, AlgebraTree, NodeIdx, TreeVisitor, Value},
+    context::{call_variable, FuncError, ValueSource, VarError},
     value::MathemaValue,
 };
 
@@ -16,7 +15,7 @@ pub struct EvalError {
     pub kind: EvalErrorKind,
 }
 
-pub struct Evaluate<'c>(pub &'c Context);
+pub struct Evaluate<'c>(pub &'c dyn ValueSource);
 
 impl TreeVisitor for Evaluate<'_> {
     type Output = Result<MathemaValue, Vec<EvalError>>;
@@ -25,9 +24,9 @@ impl TreeVisitor for Evaluate<'_> {
     }
 }
 
-fn evaluate_tree(context: &Context, nodes: &[AlgExpr], start_idx: NodeIdx) -> Result<MathemaValue, Vec<EvalError>> {
+pub(crate) fn evaluate_tree(values: &dyn ValueSource, nodes: &[AlgExpr], start_idx: NodeIdx) -> Result<MathemaValue, Vec<EvalError>> {
     fn recurse(
-        context: &Context,
+        values: &dyn ValueSource,
         nodes: &[AlgExpr],
         idx: NodeIdx,
         errors: &mut Vec<EvalError>
@@ -37,7 +36,7 @@ fn evaluate_tree(context: &Context, nodes: &[AlgExpr], start_idx: NodeIdx) -> Re
             AlgExpr::Value(val) => match val {
                 Value::Num(num) => Some(num.clone()),
                 Value::Var(var) => {
-                    match call_variable(context, *var) {
+                    match call_variable(values, *var) {
                         Ok(ans) => Some(ans),
                         Err(e) => {
                             let kind = EvalErrorKind::BadVar(e);
@@ -48,7 +47,7 @@ fn evaluate_tree(context: &Context, nodes: &[AlgExpr], start_idx: NodeIdx) -> Re
                 }
             },
             AlgExpr::Unary { op, inner } => {
-                if let Some(val) = recurse(context, nodes, *inner, errors) {
+                if let Some(val) = recurse(values, nodes, *inner, errors) {
                     match op {
                         AlgUnaryOp::Neg => Some(val.neg())
                     }
@@ -57,8 +56,8 @@ fn evaluate_tree(context: &Context, nodes: &[AlgExpr], start_idx: NodeIdx) -> Re
                 }
             },
             AlgExpr::Binary { left, op, right } => {
-                let left = recurse(context, nodes, *left, errors);
-                let right = recurse(context, nodes, *right, errors);
+                let left = recurse(values, nodes, *left, errors);
+                let right = recurse(values, nodes, *right, errors);
 
                 if let (Some(l), Some(r)) = (left, right) {
                     match op {
@@ -72,13 +71,14 @@ fn evaluate_tree(context: &Context, nodes: &[AlgExpr], start_idx: NodeIdx) -> Re
                     None
                 }
             },
-            AlgExpr::FnCall { name, args } => {
-                let args: Vec<MathemaValue> = args
+            AlgExpr::FnCall { name: _, args: _these_args } => {
+                // TODO: These are broken, needs total rework
+                let _these_args: Vec<AlgebraTree> = todo!();/*these_args
                     .iter()
-                    .map(|arg| recurse(context, nodes, *arg, errors))
-                    .collect::<Option<_>>()?;
+                    .map(|idx| nodes[*idx])
+                    .collect::<Vec<_>>();
 
-                match call_function(context, *name, &args) {
+                match call_function(values, *name, these_args) {
                     Ok(ans) => Some(ans),
                     Err(e) => {
                         let kind = EvalErrorKind::BadFnCall(e);
@@ -86,13 +86,13 @@ fn evaluate_tree(context: &Context, nodes: &[AlgExpr], start_idx: NodeIdx) -> Re
                         errors.push(error);
                         None
                     }
-                }
+                }*/
             }
         }
     }
 
     let mut errors = Vec::new();
-    let result = recurse(context, nodes, start_idx, &mut errors);
+    let result = recurse(values, nodes, start_idx, &mut errors);
     if let Some(ans) = result {
         Ok(ans)
     } else {

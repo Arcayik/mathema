@@ -18,10 +18,25 @@ use crate::{
     value::MathemaValue
 };
 
+pub trait ValueSource {
+    fn get_variable(&self, name: Symbol) -> Option<&AlgebraTree>;
+    fn get_function(&self, name: Symbol) -> Option<&Function>;
+}
+
 #[derive(Default)]
 pub struct Context {
     variables: HashMap<Symbol, AlgebraTree>,
     functions: HashMap<Symbol, Function>,
+}
+
+impl ValueSource for Context {
+    fn get_variable(&self, name: Symbol) -> Option<&AlgebraTree> {
+        self.get_variable(name)
+    }
+
+    fn get_function(&self, name: Symbol) -> Option<&Function> {
+        self.get_function(name)
+    }
 }
 
 impl Context {
@@ -84,7 +99,7 @@ pub enum Outcome {
     Fn(Symbol)
 }
 
-pub fn call_variable(context: &Context, name: Symbol) -> Result<MathemaValue, VarError> {
+pub fn call_variable(context: &dyn ValueSource, name: Symbol) -> Result<MathemaValue, VarError> {
     if is_constant(name.as_str()) {
         Ok(intrinsics::CONSTANTS[name.as_str()].clone())
     } else if let Some(var_alg) = context.get_variable(name) {

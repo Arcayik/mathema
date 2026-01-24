@@ -1,7 +1,6 @@
 use crate::{
     algebra::ast::{AlgBinOp, AlgExpr, AlgUnaryOp, AlgebraTree, NodeIdx, TreeVisitor, Value},
     context::{call_variable, FuncError, ValueSource, VarError},
-    value::MathemaValue,
 };
 
 #[derive(Debug)]
@@ -18,19 +17,19 @@ pub struct EvalError {
 pub struct Evaluate<'c>(pub &'c dyn ValueSource);
 
 impl TreeVisitor for Evaluate<'_> {
-    type Output = Result<MathemaValue, Vec<EvalError>>;
+    type Output = Result<f64, Vec<EvalError>>;
     fn visit_tree(&self, nodes: &[AlgExpr], start_idx: NodeIdx) -> Self::Output {
         evaluate_tree(self.0, nodes, start_idx)
     }
 }
 
-pub(crate) fn evaluate_tree(values: &dyn ValueSource, nodes: &[AlgExpr], start_idx: NodeIdx) -> Result<MathemaValue, Vec<EvalError>> {
+pub(crate) fn evaluate_tree(values: &dyn ValueSource, nodes: &[AlgExpr], start_idx: NodeIdx) -> Result<f64, Vec<EvalError>> {
     fn recurse(
         values: &dyn ValueSource,
         nodes: &[AlgExpr],
         idx: NodeIdx,
         errors: &mut Vec<EvalError>
-    ) -> Option<MathemaValue> {
+    ) -> Option<f64> {
         let alg = &nodes[idx];
         match alg {
             AlgExpr::Value(val) => match val {
@@ -49,7 +48,7 @@ pub(crate) fn evaluate_tree(values: &dyn ValueSource, nodes: &[AlgExpr], start_i
             AlgExpr::Unary { op, inner } => {
                 if let Some(val) = recurse(values, nodes, *inner, errors) {
                     match op {
-                        AlgUnaryOp::Neg => Some(val.neg())
+                        AlgUnaryOp::Neg => Some(- val)
                     }
                 } else {
                     None
@@ -61,11 +60,11 @@ pub(crate) fn evaluate_tree(values: &dyn ValueSource, nodes: &[AlgExpr], start_i
 
                 if let (Some(l), Some(r)) = (left, right) {
                     match op {
-                        AlgBinOp::Add => Some(l.add(&r)),
-                        AlgBinOp::Sub => Some(l.sub(&r)),
-                        AlgBinOp::Mul => Some(l.mul(&r)),
-                        AlgBinOp::Div => Some(l.div(&r)),
-                        AlgBinOp::Exp => Some(l.pow(&r)),
+                        AlgBinOp::Add => Some(l + r),
+                        AlgBinOp::Sub => Some(l - r),
+                        AlgBinOp::Mul => Some(l * r),
+                        AlgBinOp::Div => Some(l / r),
+                        AlgBinOp::Exp => Some(l.powf(r)),
                     }
                 } else {
                     None

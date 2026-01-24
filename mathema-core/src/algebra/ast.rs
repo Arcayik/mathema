@@ -1,5 +1,6 @@
 use crate::{
-    float, parsing::ast::{AstBinary, AstExpr, AstFnCall, AstGroup, AstUnary, AstValue, BinOp, UnaryOp}, symbol::Symbol, value::MathemaValue
+    parsing::ast::{AstBinary, AstExpr, AstFnCall, AstGroup, AstUnary, AstValue, BinOp, UnaryOp},
+    symbol::Symbol
 };
 
 #[derive(Debug)]
@@ -111,8 +112,8 @@ impl From<Value> for AlgExpr {
     }
 }
 
-impl From<MathemaValue> for AlgExpr {
-    fn from(value: MathemaValue) -> Self {
+impl From<f64> for AlgExpr {
+    fn from(value: f64) -> Self {
         Value::Num(value).into()
     }
 }
@@ -125,7 +126,7 @@ impl From<Symbol> for AlgExpr {
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum Value {
-    Num(MathemaValue),
+    Num(f64),
     Var(Symbol),
 }
 
@@ -133,7 +134,7 @@ impl From<&AstValue> for Value {
     fn from(value: &AstValue) -> Self {
         match value {
             AstValue::Ident(i) => Value::Var(i.symbol),
-            AstValue::Literal(l) => Value::Num(float!(l.num))
+            AstValue::Literal(l) => Value::Num(l.num)
         }
     }
 }

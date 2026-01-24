@@ -1,10 +1,9 @@
 use std::{collections::HashMap, sync::LazyLock};
-use rug::float::Constant;
 
-use crate::{context::FuncError, value::MathemaValue};
+use crate::context::FuncError;
 use functions::*;
 
-pub static CONSTANTS: LazyLock<HashMap<&'static str, MathemaValue>> = LazyLock::new(declare_constants);
+pub static CONSTANTS: LazyLock<HashMap<&'static str, f64>> = LazyLock::new(declare_constants);
 pub static UNARY_FUNCS: LazyLock<HashMap<&'static str, UnaryFunc>> = LazyLock::new(declare_unary);
 pub static BINARY_FUNCS: LazyLock<HashMap<&'static str, BinaryFunc>> = LazyLock::new(declare_binary);
 
@@ -12,11 +11,10 @@ macro_rules! define_constants {
     (
         $( $name:ident = $def:expr ;)*
     ) => {
-        fn declare_constants() -> HashMap<&'static str, MathemaValue> {
+        fn declare_constants() -> HashMap<&'static str, f64> {
             let mut hashmap = HashMap::new();
             $(
-                let value = $crate::value::MathemaValue { inner: $def };
-                let _ = hashmap.insert(stringify!($name), value)
+                let _ = hashmap.insert(stringify!($name), $def)
             );*;
             hashmap
         }
@@ -24,23 +22,23 @@ macro_rules! define_constants {
 }
 
 define_constants! {
-    pi = rug::Float::with_val(512, Constant::Pi);
-    tau = rug::Float::with_val(512, Constant::Pi) * 2;
-    e = rug::Float::with_val(512, Constant::Euler);
+    pi = std::f64::consts::PI;
+    tau = std::f64::consts::TAU;
+    e = std::f64::consts::E;
 }
 
-pub struct UnaryFunc(fn(MathemaValue) -> MathemaValue);
+pub struct UnaryFunc(fn(f64) -> f64);
 
 impl UnaryFunc {
-    pub fn call(&self, x: MathemaValue) -> MathemaValue {
+    pub fn call(&self, x: f64) -> f64 {
         (self.0)(x)
     }
 }
 
-pub struct BinaryFunc(fn(MathemaValue, MathemaValue) -> MathemaValue);
+pub struct BinaryFunc(fn(f64, f64) -> f64);
 
 impl BinaryFunc {
-    pub fn call(&self, x: MathemaValue, y: MathemaValue) -> MathemaValue {
+    pub fn call(&self, x: f64, y: f64) -> f64 {
         (self.0)(x, y)
     }
 }
@@ -74,38 +72,34 @@ pub fn is_binary_func(name: &str) -> bool {
     BINARY_FUNCS.contains_key(name)
 }
 
-pub fn call_unary_func(name: &str, x: MathemaValue) -> Result<MathemaValue, FuncError> {
+pub fn call_unary_func(name: &str, x: f64) -> Result<f64, FuncError> {
     let func = UNARY_FUNCS.get(name).unwrap();
     Ok(func.call(x))
 }
 
-pub fn call_binary_func(name: &str, x: MathemaValue, y: MathemaValue) -> Result<MathemaValue, FuncError> {
+pub fn call_binary_func(name: &str, x: f64, y: f64) -> Result<f64, FuncError> {
     let func = BINARY_FUNCS.get(name).unwrap();
     Ok(func.call(x, y))
 }
 
 mod functions {
-    use crate::value::MathemaValue;
-
-    pub fn sin(x: MathemaValue) -> MathemaValue {
-        MathemaValue { inner: x.number().sin() }
+    pub fn sin(x: f64) -> f64 {
+        x.sin()
     }
 
-    pub fn cos(x: MathemaValue) -> MathemaValue {
-        MathemaValue { inner: x.number().cos() }
+    pub fn cos(x: f64) -> f64 {
+        x.cos()
     }
 
-    pub fn tan(x: MathemaValue) -> MathemaValue {
-        MathemaValue { inner: x.number().tan() }
+    pub fn tan(x: f64) -> f64 {
+        x.tan()
     }
 
-    pub fn log(x: MathemaValue, b: MathemaValue) -> MathemaValue {
-        let inner = x.number().log10() / b.number().log10();
-        MathemaValue { inner }
+    pub fn log(x: f64, b: f64) -> f64 {
+        x.log10() / b.log10()
     }
 
-    pub fn ln(x: MathemaValue) -> MathemaValue {
-        let inner = x.number().ln();
-        MathemaValue { inner }
+    pub fn ln(x: f64) -> f64 {
+        x.ln()
     }
 }

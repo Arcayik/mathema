@@ -8,7 +8,6 @@ use crate::{
     context::{Context, FuncError, ValueSource},
     intrinsics::{call_binary_func, call_unary_func, is_binary_func, is_unary_func},
     symbol::Symbol,
-    value::MathemaValue
 };
 
 #[derive(Debug)]
@@ -149,14 +148,14 @@ impl FnArgs {
 pub struct EvaluateWithArgs<'c>(&'c dyn ValueSource);
 
 impl TreeVisitor for EvaluateWithArgs<'_> {
-    type Output = Result<MathemaValue, Vec<EvalError>>;
+    type Output = Result<f64, Vec<EvalError>>;
     fn visit_tree(&self, nodes: &[AlgExpr], start_idx: NodeIdx) -> Self::Output {
         let context = self.0;
         evaluate_tree(context, nodes, start_idx)
     }
 }
 
-fn eval_user_function(context: &dyn ValueSource, function: &Function, input: Vec<AlgebraTree>) -> Result<MathemaValue, FuncError> {
+fn eval_user_function(context: &dyn ValueSource, function: &Function, input: Vec<AlgebraTree>) -> Result<f64, FuncError> {
     let args_off = input.len() as isize - function.params.len() as isize;
     if args_off != 0 {
         return Err(FuncError::BadArgs(args_off))
@@ -166,7 +165,7 @@ fn eval_user_function(context: &dyn ValueSource, function: &Function, input: Vec
         .map_err(FuncError::Eval)
 }
 
-pub fn call_function(context: &dyn ValueSource, name: Symbol, input: Vec<AlgebraTree>) -> Result<MathemaValue, FuncError> {
+pub fn call_function(context: &dyn ValueSource, name: Symbol, input: Vec<AlgebraTree>) -> Result<f64, FuncError> {
     if let Some(func) = context.get_function(name) {
         eval_user_function(context, func, input)
     } else if is_unary_func(name.as_str()) && input.len() == 1 {

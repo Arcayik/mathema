@@ -15,7 +15,6 @@ use crate::{
     error::MathemaError,
     function::{FnParams, Function},
     symbol::Symbol,
-    value::MathemaValue
 };
 
 pub trait ValueSource {
@@ -94,12 +93,12 @@ pub enum VarError {
 }
 
 pub enum Outcome {
-    Answer(MathemaValue),
+    Answer(f64),
     Var(Symbol),
     Fn(Symbol)
 }
 
-pub fn call_variable(context: &dyn ValueSource, name: Symbol) -> Result<MathemaValue, VarError> {
+pub fn call_variable(context: &dyn ValueSource, name: Symbol) -> Result<f64, VarError> {
     if is_constant(name.as_str()) {
         Ok(intrinsics::CONSTANTS[name.as_str()].clone())
     } else if let Some(var_alg) = context.get_variable(name) {

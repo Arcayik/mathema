@@ -100,7 +100,7 @@ pub enum Outcome {
 
 pub fn call_variable(context: &dyn ValueSource, name: Symbol) -> Result<f64, VarError> {
     if is_constant(name.as_str()) {
-        Ok(intrinsics::CONSTANTS[name.as_str()].clone())
+        Ok(intrinsics::CONSTANTS[name.as_str()])
     } else if let Some(var_alg) = context.get_variable(name) {
         match var_alg.accept(Evaluate(context)) {
             Ok(ans) => Ok(ans),

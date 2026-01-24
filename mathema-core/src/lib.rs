@@ -1,11 +1,12 @@
 pub mod algebra;
+pub mod arena;
 pub mod context;
+pub mod error;
 pub mod intrinsics;
 pub mod function;
-pub mod symbol;
-pub mod error;
 #[macro_use]
 pub mod parsing;
+pub mod symbol;
 
 #[cfg(test)]
 mod tests {

@@ -56,7 +56,11 @@ fn parse_ast(ast: &AstExpr, tree: &mut AlgebraTree) -> NodeIdx {
 }
 
 fn parse_value(value: &AstValue, tree: &mut AlgebraTree) -> NodeIdx {
-    tree.push_node(AlgExpr::Value(value.into()))
+    let node = match value {
+        AstValue::Literal(lit) => AlgExpr::Literal(lit.num),
+        AstValue::Ident(ident) => AlgExpr::Ident(ident.symbol)
+    };
+    tree.push_node(node)
 }
 
 fn parse_unary(unary: &AstUnary, tree: &mut AlgebraTree) -> NodeIdx {
@@ -100,42 +104,22 @@ pub trait TreeVisitor {
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum AlgExpr {
-    Value(Value),
+    Literal(f64),
+    Ident(Symbol),
     Binary { left: NodeIdx, op: AlgBinOp, right: NodeIdx },
-    Unary { op: AlgUnaryOp, inner: NodeIdx},
+    Unary { op: AlgUnaryOp, inner: NodeIdx },
     FnCall { name: Symbol, args: Vec<NodeIdx> },
-}
-
-impl From<Value> for AlgExpr {
-    fn from(value: Value) -> Self {
-        Self::Value(value)
-    }
 }
 
 impl From<f64> for AlgExpr {
     fn from(value: f64) -> Self {
-        Value::Num(value).into()
+        AlgExpr::Literal(value)
     }
 }
 
 impl From<Symbol> for AlgExpr {
-    fn from(value: Symbol) -> Self {
-        Value::Var(value).into()
-    }
-}
-
-#[derive(Clone, Debug, PartialEq)]
-pub enum Value {
-    Num(f64),
-    Var(Symbol),
-}
-
-impl From<&AstValue> for Value {
-    fn from(value: &AstValue) -> Self {
-        match value {
-            AstValue::Ident(i) => Value::Var(i.symbol),
-            AstValue::Literal(l) => Value::Num(l.num)
-        }
+    fn from(symbol: Symbol) -> Self {
+        AlgExpr::Ident(symbol)
     }
 }
 

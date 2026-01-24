@@ -374,7 +374,8 @@ impl Precedence {
 
     pub fn of_alg(e: &AlgExpr) -> Self {
         match e {
-            AlgExpr::Value(..) => Precedence::Unambiguous,
+            AlgExpr::Literal(..) => Precedence::Unambiguous,
+            AlgExpr::Ident(..) => Precedence::Unambiguous,
             AlgExpr::Binary{ op, .. } => Precedence::of_alg_binop(op),
             AlgExpr::Unary{ .. } => Precedence::Unary,
             AlgExpr::FnCall{ .. } => Precedence::Unambiguous,

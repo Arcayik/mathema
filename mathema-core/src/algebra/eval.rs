@@ -1,5 +1,5 @@
 use crate::{
-    algebra::ast::{AlgBinOp, AlgExpr, AlgUnaryOp, AlgebraTree, NodeIdx, TreeVisitor, Value},
+    algebra::ast::{AlgBinOp, AlgExpr, AlgUnaryOp, AlgebraTree, NodeIdx, TreeVisitor},
     context::{call_variable, FuncError, ValueSource, VarError},
 };
 
@@ -32,17 +32,13 @@ pub(crate) fn evaluate_tree(values: &dyn ValueSource, nodes: &[AlgExpr], start_i
     ) -> Option<f64> {
         let alg = &nodes[idx];
         match alg {
-            AlgExpr::Value(val) => match val {
-                Value::Num(num) => Some(num.clone()),
-                Value::Var(var) => {
-                    match call_variable(values, *var) {
-                        Ok(ans) => Some(ans),
-                        Err(e) => {
-                            let kind = EvalErrorKind::BadVar(e);
-                            errors.push(EvalError { kind });
-                            None
-                        }
-                    }
+            AlgExpr::Literal(val) => Some(*val),
+            AlgExpr::Ident(symbol) => match call_variable(values, *symbol) {
+                Ok(ans) => Some(ans),
+                Err(e) => {
+                    let kind = EvalErrorKind::BadVar(e);
+                    errors.push(EvalError { kind });
+                    None
                 }
             },
             AlgExpr::Unary { op, inner } => {

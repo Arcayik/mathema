@@ -5,11 +5,11 @@ use crate::{
 
 #[derive(Debug)]
 pub struct AlgebraTree {
-    root: NodeIdx,
+    root: NodeId,
     nodes: Vec<AlgExpr>
 }
 
-pub type NodeIdx = usize;
+pub type NodeId = usize;
 
 impl AlgebraTree {
     /// Create an empty AlgebraTree 
@@ -27,7 +27,7 @@ impl AlgebraTree {
     }
 
     /// Push new node to the tree
-    fn push_node(&mut self, node: AlgExpr) -> NodeIdx {
+    fn push_node(&mut self, node: AlgExpr) -> NodeId {
         let idx = self.nodes.len();
         self.nodes.push(node);
         idx
@@ -45,7 +45,7 @@ pub fn expr_to_algebra(ast: &AstExpr) -> AlgebraTree {
     tree
 }
 
-fn parse_ast(ast: &AstExpr, tree: &mut AlgebraTree) -> NodeIdx {
+fn parse_ast(ast: &AstExpr, tree: &mut AlgebraTree) -> NodeId {
     match ast {
         AstExpr::Value(v) => parse_value(v, tree),
         AstExpr::Unary(u) => parse_unary(u, tree),
@@ -55,7 +55,7 @@ fn parse_ast(ast: &AstExpr, tree: &mut AlgebraTree) -> NodeIdx {
     }
 }
 
-fn parse_value(value: &AstValue, tree: &mut AlgebraTree) -> NodeIdx {
+fn parse_value(value: &AstValue, tree: &mut AlgebraTree) -> NodeId {
     let node = match value {
         AstValue::Literal(lit) => AlgExpr::Literal(lit.num),
         AstValue::Ident(ident) => AlgExpr::Ident(ident.symbol)
@@ -63,7 +63,7 @@ fn parse_value(value: &AstValue, tree: &mut AlgebraTree) -> NodeIdx {
     tree.push_node(node)
 }
 
-fn parse_unary(unary: &AstUnary, tree: &mut AlgebraTree) -> NodeIdx {
+fn parse_unary(unary: &AstUnary, tree: &mut AlgebraTree) -> NodeId {
     let alg = AlgExpr::Unary {
         op: unary.op.clone().into(),
         inner: parse_ast(&unary.expr, tree)
@@ -71,7 +71,7 @@ fn parse_unary(unary: &AstUnary, tree: &mut AlgebraTree) -> NodeIdx {
     tree.push_node(alg)
 }
 
-fn parse_binary(binary: &AstBinary, tree: &mut AlgebraTree) -> NodeIdx {
+fn parse_binary(binary: &AstBinary, tree: &mut AlgebraTree) -> NodeId {
     let alg = AlgExpr::Binary {
         left: parse_ast(&binary.lhs, tree),
         op: binary.op.clone().into(),
@@ -80,11 +80,11 @@ fn parse_binary(binary: &AstBinary, tree: &mut AlgebraTree) -> NodeIdx {
     tree.push_node(alg)
 }
 
-fn parse_group(group: &AstGroup, tree: &mut AlgebraTree) -> NodeIdx {
+fn parse_group(group: &AstGroup, tree: &mut AlgebraTree) -> NodeId {
     parse_ast(&group.expr, tree)
 }
 
-fn parse_fn_call(fn_call: &AstFnCall, tree: &mut AlgebraTree) -> NodeIdx {
+fn parse_fn_call(fn_call: &AstFnCall, tree: &mut AlgebraTree) -> NodeId {
     let args = fn_call.inputs
         .iter()
         .map(|ast| parse_ast(ast, tree))
@@ -99,16 +99,16 @@ fn parse_fn_call(fn_call: &AstFnCall, tree: &mut AlgebraTree) -> NodeIdx {
 
 pub trait TreeVisitor {
     type Output;
-    fn visit_tree(&self, nodes: &[AlgExpr], start_idx: NodeIdx) -> Self::Output;
+    fn visit_tree(&self, nodes: &[AlgExpr], start_idx: NodeId) -> Self::Output;
 }
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum AlgExpr {
     Literal(f64),
     Ident(Symbol),
-    Binary { left: NodeIdx, op: AlgBinOp, right: NodeIdx },
-    Unary { op: AlgUnaryOp, inner: NodeIdx },
-    FnCall { name: Symbol, args: Vec<NodeIdx> },
+    Binary { left: NodeId, op: AlgBinOp, right: NodeId },
+    Unary { op: AlgUnaryOp, inner: NodeId },
+    FnCall { name: Symbol, args: Vec<NodeId> },
 }
 
 impl From<f64> for AlgExpr {
@@ -118,12 +118,12 @@ impl From<f64> for AlgExpr {
 }
 
 impl From<Symbol> for AlgExpr {
-    fn from(symbol: Symbol) -> Self {
-        AlgExpr::Ident(symbol)
+    fn from(id: Symbol) -> Self {
+        AlgExpr::Ident(id)
     }
 }
 
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, Hash, PartialEq, Eq)]
 pub enum AlgBinOp { Add, Sub, Mul, Div, Exp }
 
 impl std::fmt::Display for AlgBinOp {
@@ -160,7 +160,7 @@ impl From<BinOp> for AlgBinOp {
     }
 }
 
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, Hash, PartialEq, Eq)]
 pub enum AlgUnaryOp { Neg }
 
 impl std::fmt::Display for AlgUnaryOp {

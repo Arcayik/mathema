@@ -1,5 +1,5 @@
 use crate::{
-    algebra::ast::{AlgBinOp, AlgExpr, AlgUnaryOp, AlgebraTree, NodeIdx, TreeVisitor},
+    algebra::ast::{AlgBinOp, AlgExpr, AlgUnaryOp, AlgebraTree, NodeId, TreeVisitor},
     context::{call_variable, FuncError, ValueSource, VarError},
 };
 
@@ -18,22 +18,22 @@ pub struct Evaluate<'c>(pub &'c dyn ValueSource);
 
 impl TreeVisitor for Evaluate<'_> {
     type Output = Result<f64, Vec<EvalError>>;
-    fn visit_tree(&self, nodes: &[AlgExpr], start_idx: NodeIdx) -> Self::Output {
+    fn visit_tree(&self, nodes: &[AlgExpr], start_idx: NodeId) -> Self::Output {
         evaluate_tree(self.0, nodes, start_idx)
     }
 }
 
-pub(crate) fn evaluate_tree(values: &dyn ValueSource, nodes: &[AlgExpr], start_idx: NodeIdx) -> Result<f64, Vec<EvalError>> {
+pub(crate) fn evaluate_tree(values: &dyn ValueSource, nodes: &[AlgExpr], start_idx: NodeId) -> Result<f64, Vec<EvalError>> {
     fn recurse(
         values: &dyn ValueSource,
         nodes: &[AlgExpr],
-        idx: NodeIdx,
+        idx: NodeId,
         errors: &mut Vec<EvalError>
     ) -> Option<f64> {
         let alg = &nodes[idx];
         match alg {
             AlgExpr::Literal(val) => Some(*val),
-            AlgExpr::Ident(symbol) => match call_variable(values, *symbol) {
+            AlgExpr::Ident(id) => match call_variable(values, *id) {
                 Ok(ans) => Some(ans),
                 Err(e) => {
                     let kind = EvalErrorKind::BadVar(e);

@@ -2,7 +2,7 @@ use std::vec::IntoIter;
 
 use crate::{
     algebra::{
-        ast::{AlgExpr, AlgebraTree, NodeIdx, TreeVisitor},
+        ast::{AlgExpr, AlgebraTree, NodeId, TreeVisitor},
         eval::{evaluate_tree, EvalError, Evaluate}
     },
     context::{Context, FuncError, ValueSource},
@@ -149,7 +149,7 @@ pub struct EvaluateWithArgs<'c>(&'c dyn ValueSource);
 
 impl TreeVisitor for EvaluateWithArgs<'_> {
     type Output = Result<f64, Vec<EvalError>>;
-    fn visit_tree(&self, nodes: &[AlgExpr], start_idx: NodeIdx) -> Self::Output {
+    fn visit_tree(&self, nodes: &[AlgExpr], start_idx: NodeId) -> Self::Output {
         let context = self.0;
         evaluate_tree(context, nodes, start_idx)
     }

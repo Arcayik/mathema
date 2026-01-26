@@ -5,37 +5,23 @@ use crate::{
         ast::{expr_to_algebra, AlgebraTree},
         eval::{EvalError, Evaluate}
     },
+    arena::Arena,
+    error::MathemaError,
+    function::{FnParams, Function},
     intrinsics::{self, is_binary_func, is_constant, is_unary_func},
     parsing::{
         ast::AstStmt,
         lexer::tokenize,
         parser::ParseBuffer,
         token::Span,
-    },
-    error::MathemaError,
-    function::{FnParams, Function},
-    symbol::Symbol,
+    }, symbol::Symbol
 };
-
-pub trait ValueSource {
-    fn get_variable(&self, name: Symbol) -> Option<&AlgebraTree>;
-    fn get_function(&self, name: Symbol) -> Option<&Function>;
-}
 
 #[derive(Default)]
 pub struct Context {
+    pub arena: Arena,
     variables: HashMap<Symbol, AlgebraTree>,
     functions: HashMap<Symbol, Function>,
-}
-
-impl ValueSource for Context {
-    fn get_variable(&self, name: Symbol) -> Option<&AlgebraTree> {
-        self.get_variable(name)
-    }
-
-    fn get_function(&self, name: Symbol) -> Option<&Function> {
-        self.get_function(name)
-    }
 }
 
 impl Context {
@@ -98,11 +84,11 @@ pub enum Outcome {
     Fn(Symbol)
 }
 
-pub fn call_variable(context: &dyn ValueSource, name: Symbol) -> Result<f64, VarError> {
+pub fn call_variable(ctxt: &Context, name: Symbol) -> Result<f64, VarError> {
     if is_constant(name.as_str()) {
         Ok(intrinsics::CONSTANTS[name.as_str()])
-    } else if let Some(var_alg) = context.get_variable(name) {
-        match var_alg.accept(Evaluate(context)) {
+    } else if let Some(var_alg) = ctxt.get_variable(name) {
+        match var_alg.visit(ctxt, Evaluate) {
             Ok(ans) => Ok(ans),
             Err(errors) => {
                 Err(VarError::Eval { name, errors })
@@ -113,7 +99,7 @@ pub fn call_variable(context: &dyn ValueSource, name: Symbol) -> Result<f64, Var
     }
 }
 
-pub fn mathema_parse(context: &mut Context, input: &str) -> Result<Outcome, MathemaError> {
+pub fn mathema_parse(ctxt: &mut Context, input: &str) -> Result<Outcome, MathemaError> {
     let (buffer, errors) = tokenize(input);
     if !errors.is_empty() {
         return Err(MathemaError::Lexer(errors))
@@ -125,10 +111,10 @@ pub fn mathema_parse(context: &mut Context, input: &str) -> Result<Outcome, Math
 
     match stmt {
         AstStmt::Expr(expr) => {
-            let alg = expr_to_algebra(&expr);
-            match alg.accept(Evaluate(context)) {
+            let alg = expr_to_algebra(&expr, &mut ctxt.arena );
+            match alg.visit(ctxt, Evaluate) {
                 Ok(ans) => {
-                    context.set_variable(Symbol::intern("ans"), alg);
+                    ctxt.set_variable(Symbol::intern("ans"), alg);
                     Ok(Outcome::Answer(ans))
                 },
                 Err(e) => {
@@ -138,7 +124,7 @@ pub fn mathema_parse(context: &mut Context, input: &str) -> Result<Outcome, Math
         },
         AstStmt::VarDecl(decl) => {
             let name = decl.var_name.symbol;
-            let alg = expr_to_algebra(&decl.expr);
+            let alg = expr_to_algebra(&decl.expr, &mut ctxt.arena);
 
             if is_constant(name.as_str()) {
                 // TODO: change, next reimplementation
@@ -147,12 +133,12 @@ pub fn mathema_parse(context: &mut Context, input: &str) -> Result<Outcome, Math
                 let error = DefError { kind, span };
                 return Err(MathemaError::Definition(error))
             }
-            context.set_variable(name, alg);
+            ctxt.set_variable(name, alg);
             Ok(Outcome::Var(name))
         },
         AstStmt::FnDecl(decl) => {
             let name = decl.sig.fn_name.symbol;
-            let alg = expr_to_algebra(&decl.expr);
+            let alg = expr_to_algebra(&decl.expr, &mut ctxt.arena);
 
             let arg_vec: Vec<Symbol> = decl.sig.inputs
                 .iter()
@@ -168,7 +154,7 @@ pub fn mathema_parse(context: &mut Context, input: &str) -> Result<Outcome, Math
                 let error = DefError { kind, span };
                 return Err(MathemaError::Definition(error))
             }
-            context.set_function(name, func);
+            ctxt.set_function(name, func);
             Ok(Outcome::Fn(name))
         }
     }

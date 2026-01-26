@@ -40,7 +40,6 @@ impl Symbol {
     }
 }
 
-
 struct StringTable {
     map: HashMap<&'static str, SymbolId>,
     strings: Vec<&'static str>

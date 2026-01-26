@@ -1,6 +1,7 @@
 use crate::{
-    algebra::ast::{AlgBinOp, AlgExpr, AlgUnaryOp, AlgebraTree, NodeId, TreeVisitor},
-    context::{call_variable, FuncError, ValueSource, VarError},
+    algebra::ast::{AlgBinOp, AlgExpr, AlgUnaryOp, NodeId, TreeVisitor},
+    context::{call_variable, Context, FuncError, VarError},
+    function::{call_function, FnArgs}
 };
 
 #[derive(Debug)]
@@ -14,35 +15,43 @@ pub struct EvalError {
     pub kind: EvalErrorKind,
 }
 
-pub struct Evaluate<'c>(pub &'c dyn ValueSource);
+pub struct Evaluate;
 
-impl TreeVisitor for Evaluate<'_> {
+impl TreeVisitor for Evaluate {
     type Output = Result<f64, Vec<EvalError>>;
-    fn visit_tree(&self, nodes: &[AlgExpr], start_idx: NodeId) -> Self::Output {
-        evaluate_tree(self.0, nodes, start_idx)
+    fn visit_tree(&self, ctxt: &Context, start_idx: NodeId) -> Self::Output {
+        evaluate_tree(ctxt, start_idx, None)
     }
 }
 
-pub(crate) fn evaluate_tree(values: &dyn ValueSource, nodes: &[AlgExpr], start_idx: NodeId) -> Result<f64, Vec<EvalError>> {
+pub(crate) fn evaluate_tree(ctxt: &Context, start_idx: NodeId, args: Option<&FnArgs>) -> Result<f64, Vec<EvalError>> {
     fn recurse(
-        values: &dyn ValueSource,
-        nodes: &[AlgExpr],
+        ctxt: &Context,
         idx: NodeId,
+        args: Option<&FnArgs>,
         errors: &mut Vec<EvalError>
     ) -> Option<f64> {
-        let alg = &nodes[idx];
+        let alg = &ctxt.arena[idx];
         match alg {
             AlgExpr::Literal(val) => Some(*val),
-            AlgExpr::Ident(id) => match call_variable(values, *id) {
-                Ok(ans) => Some(ans),
-                Err(e) => {
-                    let kind = EvalErrorKind::BadVar(e);
-                    errors.push(EvalError { kind });
-                    None
+            AlgExpr::Ident(id) => {
+                if let Some(args) = args {
+                    let result = args.get_arg(*id);
+                    if result.is_some() {
+                        return result;
+                    }
                 }
-            },
+                match call_variable(ctxt, *id) {
+                    Ok(ans) => Some(ans),
+                    Err(e) => {
+                        let kind = EvalErrorKind::BadVar(e);
+                        errors.push(EvalError { kind });
+                        None
+                    }
+                }
+            }
             AlgExpr::Unary { op, inner } => {
-                if let Some(val) = recurse(values, nodes, *inner, errors) {
+                if let Some(val) = recurse(ctxt, *inner, args, errors) {
                     match op {
                         AlgUnaryOp::Neg => Some(- val)
                     }
@@ -51,8 +60,8 @@ pub(crate) fn evaluate_tree(values: &dyn ValueSource, nodes: &[AlgExpr], start_i
                 }
             },
             AlgExpr::Binary { left, op, right } => {
-                let left = recurse(values, nodes, *left, errors);
-                let right = recurse(values, nodes, *right, errors);
+                let left = recurse(ctxt, *left, args, errors);
+                let right = recurse(ctxt, *right, args, errors);
 
                 if let (Some(l), Some(r)) = (left, right) {
                     match op {
@@ -66,14 +75,13 @@ pub(crate) fn evaluate_tree(values: &dyn ValueSource, nodes: &[AlgExpr], start_i
                     None
                 }
             },
-            AlgExpr::FnCall { name: _, args: _these_args } => {
-                // TODO: These are broken, needs total rework
-                let _these_args: Vec<AlgebraTree> = todo!();/*these_args
+            AlgExpr::FnCall { name, args: these_args } => {
+                let these_args: Vec<f64> = these_args
                     .iter()
-                    .map(|idx| nodes[*idx])
-                    .collect::<Vec<_>>();
+                    .map(|idx| recurse(ctxt, *idx, args, errors))
+                    .collect::<Option<Vec<_>>>()?;
 
-                match call_function(values, *name, these_args) {
+                match call_function(ctxt, *name, these_args) {
                     Ok(ans) => Some(ans),
                     Err(e) => {
                         let kind = EvalErrorKind::BadFnCall(e);
@@ -81,13 +89,13 @@ pub(crate) fn evaluate_tree(values: &dyn ValueSource, nodes: &[AlgExpr], start_i
                         errors.push(error);
                         None
                     }
-                }*/
+                }
             }
         }
     }
 
     let mut errors = Vec::new();
-    let result = recurse(values, nodes, start_idx, &mut errors);
+    let result = recurse(ctxt, start_idx, args, &mut errors);
     if let Some(ans) = result {
         Ok(ans)
     } else {

@@ -11,8 +11,7 @@ pub mod symbol;
 #[cfg(test)]
 mod tests {
     use crate::{
-        algebra::ast::{expr_to_algebra, AlgebraTree},
-        parsing::{
+        algebra::ast::{expr_to_algebra, AlgebraTree}, context::Context, parsing::{
             ast::AstExpr,
             lexer::tokenize,
             parser::ParseBuffer
@@ -20,13 +19,15 @@ mod tests {
     };
 
     fn parse(input: &'static str) -> AlgebraTree {
+        let mut ctxt = Context::default();
+
         let (tokens, errors) = tokenize(input);
         if !errors.is_empty() {
             panic!("tokenize failed");
         }
         let parser = ParseBuffer::new(tokens);
         let expr = parser.parse::<AstExpr>().unwrap();
-        let alg = expr_to_algebra(&expr);
+        let alg = expr_to_algebra(&expr, &mut ctxt.arena);
         alg
     }
 

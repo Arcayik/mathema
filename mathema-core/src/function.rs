@@ -2,12 +2,12 @@ use std::vec::IntoIter;
 
 use crate::{
     algebra::{
-        ast::{AlgExpr, AlgebraTree, NodeId, TreeVisitor},
-        eval::{evaluate_tree, EvalError, Evaluate}
+        ast::{AlgebraTree, NodeId, TreeVisitor},
+        eval::{evaluate_tree, EvalError}
     },
-    context::{Context, FuncError, ValueSource},
+    context::{Context, FuncError},
     intrinsics::{call_binary_func, call_unary_func, is_binary_func, is_unary_func},
-    symbol::Symbol,
+    symbol::Symbol
 };
 
 #[derive(Debug)]
@@ -23,24 +23,6 @@ impl Function {
 
     pub fn num_params(&self) -> usize {
         self.params.len()
-    }
-}
-
-#[derive(Clone)]
-pub struct FunctionContext<'c>(&'c Context, &'c FnArgs);
-
-impl ValueSource for FunctionContext<'_> {
-    fn get_variable(&self, name: Symbol) -> Option<&AlgebraTree> {
-        let arg_result = self.1.take_arg(name);
-        if arg_result.is_some() {
-            arg_result
-        } else {
-            self.0.get_variable(name)
-        }
-    }
-
-    fn get_function(&self, name: Symbol) -> Option<&Function> {
-        self.0.get_function(name)
     }
 }
 
@@ -130,51 +112,49 @@ impl std::fmt::Display for ArgInUse {
 
 impl std::error::Error for ArgInUse {}
 
-#[derive(Debug)]
-pub struct FnArgs(Vec<(Symbol, AlgebraTree)>);
+#[derive(Debug, Clone)]
+pub struct FnArgs(Box<[(Symbol, f64)]>);
 
 impl FnArgs {
-    pub fn from_params(params: FnParams, args: Vec<AlgebraTree>) -> Self {
+    pub fn from_params(params: FnParams, args: Vec<f64>) -> Self {
         let inner = params.into_iter().zip(args).collect();
         FnArgs(inner)
     }
 
-    pub fn take_arg(&self, symbol: Symbol) -> Option<&AlgebraTree> {
+    pub fn get_arg(&self, symbol: Symbol) -> Option<f64> {
         let idx = self.0.iter().position(|(s, _)| *s == symbol)?;
-        Some(&self.0[idx].1)
+        Some(self.0[idx].1)
     }
 }
 
-pub struct EvaluateWithArgs<'c>(&'c dyn ValueSource);
+pub struct EvaluateWithArgs(FnArgs);
 
-impl TreeVisitor for EvaluateWithArgs<'_> {
+impl TreeVisitor for EvaluateWithArgs {
     type Output = Result<f64, Vec<EvalError>>;
-    fn visit_tree(&self, nodes: &[AlgExpr], start_idx: NodeId) -> Self::Output {
-        let context = self.0;
-        evaluate_tree(context, nodes, start_idx)
+    fn visit_tree(&self, ctxt: &Context, start_idx: NodeId) -> Self::Output {
+        evaluate_tree(ctxt, start_idx, Some(&self.0))
     }
 }
 
-fn eval_user_function(context: &dyn ValueSource, function: &Function, input: Vec<AlgebraTree>) -> Result<f64, FuncError> {
+fn eval_user_function(ctxt: &Context, function: &Function, input: Vec<f64>) -> Result<f64, FuncError> {
     let args_off = input.len() as isize - function.params.len() as isize;
     if args_off != 0 {
         return Err(FuncError::BadArgs(args_off))
     }
      
-    function.body.accept(EvaluateWithArgs(context))
+    let args = FnArgs::from_params(function.params.clone(), input);
+    function.body.visit(ctxt, EvaluateWithArgs(args))
         .map_err(FuncError::Eval)
 }
 
-pub fn call_function(context: &dyn ValueSource, name: Symbol, input: Vec<AlgebraTree>) -> Result<f64, FuncError> {
-    if let Some(func) = context.get_function(name) {
-        eval_user_function(context, func, input)
+pub fn call_function(ctxt: &Context, name: Symbol, input: Vec<f64>) -> Result<f64, FuncError> {
+    // TODO: show wrong args error instead of undefined function error
+    if let Some(func) = ctxt.get_function(name) {
+        eval_user_function(ctxt, func, input)
     } else if is_unary_func(name.as_str()) && input.len() == 1 {
-        let first = input[0].accept(Evaluate(context)).map_err(FuncError::Eval)?;
-        call_unary_func(name.as_str(), first)
+        call_unary_func(name.as_str(), input[0])
     } else if is_binary_func(name.as_str()) && input.len() == 2 {
-        let first = input[0].accept(Evaluate(context)).map_err(FuncError::Eval)?;
-        let second = input[1].accept(Evaluate(context)).map_err(FuncError::Eval)?;
-        call_binary_func(name.as_str(), first, second)
+        call_binary_func(name.as_str(), input[0], input[1])
     } else {
         Err(FuncError::NotDefined(name))
     }

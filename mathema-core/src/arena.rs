@@ -1,6 +1,9 @@
 use std::collections::HashMap;
 
-use crate::{algebra::ast::{AlgBinOp, AlgExpr, AlgUnaryOp, NodeId}, symbol::Symbol};
+use crate::{
+    algebra::ast::{AlgBinOp, AlgExpr, AlgUnaryOp, NodeId},
+    symbol::Symbol
+};
 
 #[derive(Hash, PartialEq, Eq)]
 pub struct F64Key(u64);
@@ -51,10 +54,17 @@ impl Arena {
             return id;
         }
 
-        let id = self.nodes.len();
+        let id: NodeId = self.nodes.len().into();
         self.nodes.push(node);
         self.table.insert(key, id);
         id
+    }
+}
+
+impl std::ops::Index<NodeId> for Arena {
+    type Output = AlgExpr;
+    fn index(&self, index: NodeId) -> &Self::Output {
+        &self.nodes[index.0]
     }
 }
 

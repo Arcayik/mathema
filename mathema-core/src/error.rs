@@ -7,7 +7,7 @@ pub enum MathemaError {
     Eval(Vec<EvalError>),
 }
 
-/*TODO:
+/*
 
 >> f(x) = x + a
 >> f(4)

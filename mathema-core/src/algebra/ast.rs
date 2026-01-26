@@ -1,105 +1,90 @@
 use crate::{
+    arena::Arena,
+    context::Context,
     parsing::ast::{AstBinary, AstExpr, AstFnCall, AstGroup, AstUnary, AstValue, BinOp, UnaryOp},
     symbol::Symbol
 };
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct AlgebraTree {
     root: NodeId,
-    nodes: Vec<AlgExpr>
 }
-
-pub type NodeId = usize;
 
 impl AlgebraTree {
-    /// Create an empty AlgebraTree 
-    fn empty() -> Self {
-        // Root not actually zero, just a placeholder
-        AlgebraTree { root: 0, nodes: Vec::new() }
-    }
-
-    /// Create a new, non-empty AlgebraTree 
-    pub fn new(node: AlgExpr) -> Self {
-        AlgebraTree {
-            root: 0,
-            nodes: vec![node]
-        }
-    }
-
-    /// Push new node to the tree
-    fn push_node(&mut self, node: AlgExpr) -> NodeId {
-        let idx = self.nodes.len();
-        self.nodes.push(node);
-        idx
-    }
-
-    pub fn accept<V: TreeVisitor>(&self, visitor: V) -> V::Output {
-        visitor.visit_tree(&self.nodes, self.root)
+    pub fn visit<V: TreeVisitor>(&self, ctxt: &Context, visitor: V) -> V::Output {
+        visitor.visit_tree(ctxt, self.root)
     }
 }
 
-pub fn expr_to_algebra(ast: &AstExpr) -> AlgebraTree {
-    let mut tree = AlgebraTree::empty();
-    let root = parse_ast(ast, &mut tree);
-    tree.root = root;
-    tree
+#[derive(Copy, Clone, Debug, PartialEq, Eq, Hash)]
+pub struct NodeId(pub(crate) usize);
+
+impl From<usize> for NodeId {
+    fn from(value: usize) -> Self {
+        NodeId(value)
+    }
 }
 
-fn parse_ast(ast: &AstExpr, tree: &mut AlgebraTree) -> NodeId {
+pub fn expr_to_algebra(ast: &AstExpr, arena: &mut Arena) -> AlgebraTree {
+    let root = parse_ast(ast, arena);
+    AlgebraTree { root }
+}
+
+fn parse_ast(ast: &AstExpr, arena: &mut Arena) -> NodeId {
     match ast {
-        AstExpr::Value(v) => parse_value(v, tree),
-        AstExpr::Unary(u) => parse_unary(u, tree),
-        AstExpr::Binary(b) => parse_binary(b, tree),
-        AstExpr::Group(g) => parse_group(g, tree),
-        AstExpr::FnCall(f) => parse_fn_call(f, tree),
+        AstExpr::Value(v) => parse_value(v, arena),
+        AstExpr::Unary(u) => parse_unary(u, arena),
+        AstExpr::Binary(b) => parse_binary(b, arena),
+        AstExpr::Group(g) => parse_group(g, arena),
+        AstExpr::FnCall(f) => parse_fn_call(f, arena),
     }
 }
 
-fn parse_value(value: &AstValue, tree: &mut AlgebraTree) -> NodeId {
+fn parse_value(value: &AstValue, arena: &mut Arena) -> NodeId {
     let node = match value {
         AstValue::Literal(lit) => AlgExpr::Literal(lit.num),
         AstValue::Ident(ident) => AlgExpr::Ident(ident.symbol)
     };
-    tree.push_node(node)
+    arena.intern(node)
 }
 
-fn parse_unary(unary: &AstUnary, tree: &mut AlgebraTree) -> NodeId {
+fn parse_unary(unary: &AstUnary, arena: &mut Arena) -> NodeId {
     let alg = AlgExpr::Unary {
         op: unary.op.clone().into(),
-        inner: parse_ast(&unary.expr, tree)
+        inner: parse_ast(&unary.expr, arena)
     };
-    tree.push_node(alg)
+    arena.intern(alg)
 }
 
-fn parse_binary(binary: &AstBinary, tree: &mut AlgebraTree) -> NodeId {
+fn parse_binary(binary: &AstBinary, arena: &mut Arena) -> NodeId {
     let alg = AlgExpr::Binary {
-        left: parse_ast(&binary.lhs, tree),
+        left: parse_ast(&binary.lhs, arena),
         op: binary.op.clone().into(),
-        right: parse_ast(&binary.rhs, tree)
+        right: parse_ast(&binary.rhs, arena)
     };
-    tree.push_node(alg)
+    arena.intern(alg)
 }
 
-fn parse_group(group: &AstGroup, tree: &mut AlgebraTree) -> NodeId {
-    parse_ast(&group.expr, tree)
+fn parse_group(group: &AstGroup, arena: &mut Arena) -> NodeId {
+    parse_ast(&group.expr, arena)
 }
 
-fn parse_fn_call(fn_call: &AstFnCall, tree: &mut AlgebraTree) -> NodeId {
+fn parse_fn_call(fn_call: &AstFnCall, arena: &mut Arena) -> NodeId {
     let args = fn_call.inputs
         .iter()
-        .map(|ast| parse_ast(ast, tree))
+        .map(|ast| parse_ast(ast, arena))
         .collect();
 
     let alg = AlgExpr::FnCall {
         name: fn_call.fn_name.symbol,
         args
     };
-    tree.push_node(alg)
+    arena.intern(alg)
 }
 
 pub trait TreeVisitor {
     type Output;
-    fn visit_tree(&self, nodes: &[AlgExpr], start_idx: NodeId) -> Self::Output;
+    fn visit_tree(&self, ctxt: &Context, id: NodeId) -> Self::Output;
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -181,12 +166,13 @@ impl From<UnaryOp> for AlgUnaryOp {
 
 #[cfg(test)]
 mod tests {
-    use crate::{algebra::ast::expr_to_algebra, parsing::{ast::{AstExpr, AstValue}, token::Ident}, symbol::Symbol};
+    use crate::{algebra::ast::expr_to_algebra, arena::Arena, parsing::{ast::{AstExpr, AstValue}, token::Ident}, symbol::Symbol};
 
     #[test]
     fn single_expr() {
+        let mut arena = Arena::default();
         let ast = AstExpr::Value(AstValue::Ident(Ident { symbol: Symbol::intern("x"), span: (0,1).into() }));
-        let tree = expr_to_algebra(&ast);
+        let tree = expr_to_algebra(&ast, &mut arena);
         dbg!(tree);
     }
 }

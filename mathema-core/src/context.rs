@@ -3,7 +3,8 @@ use std::collections::HashMap;
 use crate::{
     algebra::{
         ast::{expr_to_algebra, AlgebraTree},
-        eval::{EvalError, Evaluate}
+        eval::{EvalError, Evaluate},
+        display::Display,
     },
     arena::Arena,
     error::MathemaError,
@@ -14,7 +15,8 @@ use crate::{
         lexer::tokenize,
         parser::ParseBuffer,
         token::Span,
-    }, symbol::Symbol
+    },
+    symbol::Symbol
 };
 
 #[derive(Default)]
@@ -112,6 +114,7 @@ pub fn mathema_parse(ctxt: &mut Context, input: &str) -> Result<Outcome, Mathema
     match stmt {
         AstStmt::Expr(expr) => {
             let alg = expr_to_algebra(&expr, &mut ctxt.arena );
+            println!("{}", alg.visit(ctxt, Display));
             match alg.visit(ctxt, Evaluate) {
                 Ok(ans) => {
                     ctxt.set_variable(Symbol::intern("ans"), alg);

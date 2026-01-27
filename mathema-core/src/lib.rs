@@ -11,14 +11,19 @@ pub mod symbol;
 #[cfg(test)]
 mod tests {
     use crate::{
-        algebra::ast::{expr_to_algebra, AlgebraTree}, context::Context, parsing::{
+        context::Context,
+        algebra::{
+            ast::{expr_to_algebra, AlgebraTree},
+            display::Display
+        },
+        parsing::{
             ast::AstExpr,
             lexer::tokenize,
             parser::ParseBuffer
         }
     };
 
-    fn parse(input: &'static str) -> AlgebraTree {
+    fn parse(input: &'static str) -> (Context, AlgebraTree) {
         let mut ctxt = Context::default();
 
         let (tokens, errors) = tokenize(input);
@@ -28,13 +33,12 @@ mod tests {
         let parser = ParseBuffer::new(tokens);
         let expr = parser.parse::<AstExpr>().unwrap();
         let alg = expr_to_algebra(&expr, &mut ctxt.arena);
-        alg
+        (ctxt, alg)
     }
 
     fn alg_str(input: &'static str) -> String {
-        let alg = parse(input);
-        todo!()
-        // algebra_to_string(&alg).source
+        let (ctxt, alg) = parse(input);
+        alg.visit(&ctxt, Display)
     }
 
     #[test]
@@ -43,7 +47,7 @@ mod tests {
         assert_eq!(alg_str("1+2*3+4"), "1 + 2 * 3 + 4");
         assert_eq!(alg_str("(1+2)*(3+4)"), "(1 + 2) * (3 + 4)");
         assert_eq!(alg_str("5 ^ 2+1"), "5 ^ 2 + 1");
-        assert_eq!(alg_str("2^(3*(4+5))"), "2 ^ (3 * (4 + 5))");
+        assert_eq!(alg_str("2^(3*(4+5))"), "2 ^ (3(4 + 5))");
 
         assert_eq!(alg_str("-2"), "-2");
         assert_eq!(alg_str("-(6-7)"), "-(6 - 7)");
@@ -52,5 +56,6 @@ mod tests {
         assert_eq!(alg_str("2var_name"), "2var_name");
         assert_eq!(alg_str("5sin(theta)"), "5sin(theta)");
         assert_eq!(alg_str("(13x)f(2y)"), "13x * f(2y)");
+        assert_eq!(alg_str("5+2f(f(x))"), "5 + 2f(f(x))");
     }
 }

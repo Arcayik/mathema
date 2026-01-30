@@ -12,7 +12,7 @@ mod tests {
             ast::{AstBinary, AstExpr, AstGroup, AstUnary, AstValue, BinOp, UnaryOp},
             lexer::tokenize,
             parser::{ParseBuffer, ParseError},
-            token::{Caret, Delimiter, Ident, Literal, Minus, Plus, Span, Spanned, Star}
+            token::{Caret, DelimKind, Ident, Literal, Minus, Plus, Span, Spanned, Star}
         },
         symbol::Symbol
     };
@@ -82,7 +82,7 @@ mod tests {
     }
 
     fn group(expr: AstExpr) -> AstExpr {
-        AstGroup { delim: Delimiter::Parenthesis, expr: Box::new(expr) }.into()
+        AstGroup { delim: DelimKind::Parenthesis, expr: Box::new(expr) }.into()
     }
 
     #[test]
@@ -94,8 +94,7 @@ mod tests {
         assert_eq!(parse("ident").unwrap(), var("ident").into());
         assert_eq!(parse("long_ident").unwrap(), var("long_ident").into());
         assert_eq!(parse("_long_ident_").unwrap(), var("_long_ident_").into());
-        // TODO FIX: This overflows the stack!!! SOMETIMES?!?!?!?!
-        // assert_ne!(parse(" ").unwrap(), var(" ").into());
+        assert_ne!(parse(" ").unwrap(), var(" ").into());
         assert_eq!(parse("works55").unwrap(), var("works55").into());
         assert_eq!(parse("b_3").unwrap(), var("b_3").into());
     }

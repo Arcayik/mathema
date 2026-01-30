@@ -4,7 +4,7 @@ use super::{
     lexer::LexToken,
     parser::{ParseError, ParseStream},
     punctuated::Punctuated,
-    token::{Delimiter, End, Ident, Literal, Paren, Parse, Span, Spanned, Token}
+    token::{DelimKind, Ident, Literal, Paren, Parse, Span, Spanned, Token}
 };
 
 #[derive(Debug, PartialEq)]
@@ -308,7 +308,7 @@ impl Parse for UnaryOp {
 
 #[derive(PartialEq)]
 pub struct AstGroup {
-    pub(crate) delim: Delimiter,
+    pub(crate) delim: DelimKind,
     pub(crate) expr: Box<AstExpr>,
 }
 

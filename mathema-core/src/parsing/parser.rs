@@ -97,7 +97,7 @@ impl ParseBuffer {
     }
 
     /// Peek next token while skipping tokens within a group, but not ignoring the group itself.
-    pub fn peek_ignore_group<T: Token>(&self) -> bool {
+    pub fn peek_ignore_delim<T: Token>(&self) -> bool {
         if let LexToken::Group(_, offset) = self.peek_token() {
             let begin = self.save_pos();
             self.pos.update(|pos| pos + offset + 1);
@@ -136,12 +136,8 @@ impl ParseBuffer {
             LexToken::Literal(literal) => literal.span(),
             LexToken::Ident(ident) => ident.span(),
             LexToken::Punct(punct) => punct.span(),
-            LexToken::Group(group, _offset) => group.span(),
-            LexToken::End(offset) => {
-                let group_pos = self.pos.get() - offset.unsigned_abs();
-                let group = &self.src[group_pos];
-                self.get_span(group)
-            },
+            LexToken::OpenDelim(delim) => delim.span(),
+            LexToken::CloseDelim(delim) => delim.span()
         }
     }
 

@@ -18,27 +18,31 @@ mod tests {
     };
 
     fn parse(input: &str) -> Result<AstExpr, ParseError> {
-        let (buffer, errors) = tokenize(input);
-        if !errors.is_empty() {
-            panic!("parse returned errors");
-        }
+        let buffer = tokenize(input).unwrap();
         let parser = ParseBuffer::new(buffer);
         parser.parse()
     }
 
     fn fail_spans(input: &str) -> Vec<Span> {
-        let (buffer, errors) = tokenize(input);
-        // check if any errors were expected at fail span
-        if !errors.is_empty() {
-            return errors.iter().map(|e| e.span()).collect()
+        match tokenize(input) {
+            // check if any errors were expected at fail span
+            Err(e) => if !e.is_empty() {
+                return e.iter().map(|e| e.span()).collect()
+            } else {
+                panic!("unexpected error")
+            },
+
+            Ok(buf) => {
+                let parser = ParseBuffer::new(buf);
+                let result = parser.parse::<AstExpr>();
+                if let Err(e) = result {
+                    vec![e.span()]
+                } else {
+                    Vec::new()
+                }
+            }
         }
-        let parser = ParseBuffer::new(buffer);
-        let result = parser.parse::<AstExpr>();
-        if let Err(e) = result {
-            vec![e.span()]
-        } else {
-            Vec::new()
-        }
+
     }
 
     fn fails_at(input: &str, fail: impl Into<Span>) -> bool {
@@ -82,7 +86,7 @@ mod tests {
     }
 
     fn group(expr: AstExpr) -> AstExpr {
-        AstGroup { delim: DelimKind::Parenthesis, expr: Box::new(expr) }.into()
+        AstGroup { delim_kind: DelimKind::Parenthesis, expr: Box::new(expr) }.into()
     }
 
     #[test]
@@ -129,8 +133,8 @@ mod tests {
 
     #[test]
     fn parens() {
-            assert_eq!(parse("(59.9)").unwrap(), group(lit(59.9)));
-            assert_eq!(parse("1 + (1)").unwrap(), add( lit(1.0), group(lit(1.0)) ));
+        assert_eq!(parse("(59.9)").unwrap(), group(lit(59.9)));
+        assert_eq!(parse("1 + (1)").unwrap(), add( lit(1.0), group(lit(1.0)) ));
         let expected = group(mul(
                 group(add(
                         lit(1.0),

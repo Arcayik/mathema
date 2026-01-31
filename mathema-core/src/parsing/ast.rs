@@ -1,10 +1,9 @@
 use crate::algebra::ast::{AlgBinOp, AlgExpr};
 
 use super::{
-    lexer::LexToken,
     parser::{ParseError, ParseStream},
     punctuated::Punctuated,
-    token::{DelimKind, Ident, Literal, Paren, Parse, Span, Spanned, Token}
+    token::{DelimKind, Ident, Literal, Parse, Span, Spanned, Token, LParen, RParen}
 };
 
 #[derive(Debug, PartialEq)]
@@ -46,7 +45,7 @@ impl Parse for AstStmt {
     fn parse(input: ParseStream) -> Result<Self, ParseError> {
         let stmt = if input.peek::<Ident>() && input.peek2::<Token![=]>() {
             input.parse().map(AstStmt::VarDecl)?
-        } else if input.peek::<Ident>() && input.peek2::<Paren>() {
+        } else if input.peek::<Ident>() && input.peek2::<LParen>() {
             // might be a declaration, might just be a call in an expr
             parse_ambiguous_fn(input)?
         } else {
@@ -122,6 +121,7 @@ impl Spanned for AstExpr {
 
 impl Parse for AstExpr {
     fn parse(input: ParseStream) -> Result<Self, ParseError> {
+        eprintln!("parsing AstExpr");
         let lhs = parsing::parse_atom(input)?;
         parsing::parse_expr(input, lhs, Precedence::MIN)
     }
@@ -153,12 +153,16 @@ impl Spanned for AstValue {
 
 impl Parse for AstValue {
     fn parse(input: ParseStream) -> Result<Self, ParseError> {
+        eprintln!("parsing AstValue");
         let mut lookahead = input.lookahead();
         if lookahead.peek::<Literal>() {
+            eprintln!("> peek Literal");
             input.parse().map(AstValue::Literal)
         } else if lookahead.peek::<Ident>() {
+            eprintln!("> peek Ident");
             input.parse().map(AstValue::Ident)
         } else {
+            eprintln!("> lookahead error");
             Err(lookahead.error())
         }
     }
@@ -192,6 +196,7 @@ impl Spanned for AstBinary {
 
 impl Parse for AstBinary {
     fn parse(input: ParseStream) -> Result<Self, ParseError> {
+        eprintln!("parsing AstBinary");
         Ok(AstBinary {
             lhs: Box::new(input.parse()?),
             op: input.parse()?,
@@ -308,13 +313,13 @@ impl Parse for UnaryOp {
 
 #[derive(PartialEq)]
 pub struct AstGroup {
-    pub(crate) delim: DelimKind,
+    pub(crate) delim_kind: DelimKind,
     pub(crate) expr: Box<AstExpr>,
 }
 
 impl std::fmt::Debug for AstGroup {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "({:?} {:?})", self.delim, self.expr)
+        write!(f, "({:?} {:?})", self.delim_kind, self.expr)
     }
 }
 
@@ -326,13 +331,15 @@ impl Spanned for AstGroup {
 
 impl Parse for AstGroup {
     fn parse(input: ParseStream) -> Result<Self, ParseError> {
-        if let LexToken::Group(g, _) = input.next_token() {
+        if input.peek::<LParen>() {
             let group = AstGroup {
-                delim: g.delim,
+                delim_kind: DelimKind::Parenthesis,
                 expr: Box::new(input.parse()?)
             };
-            // already checked by lexer
-            assert!(matches!(input.next_token(), LexToken::End(..))); // eat End
+            // TODO: NOT checked by lexer
+            if input.peek::<RParen>() {
+                input.next_token();
+            }
             Ok(group)
         } else {
             Err(input.error("Expected group"))
@@ -385,8 +392,9 @@ impl Precedence {
 
 pub struct AstFnCall {
     pub fn_name: Ident,
-    pub parens: Paren,
-    pub inputs: Punctuated<AstExpr, Token![,]>
+    pub l_paren: LParen,
+    pub inputs: Punctuated<AstExpr, Token![,]>,
+    pub r_paren: RParen,
 }
 
 impl std::fmt::Debug for AstFnCall {
@@ -405,19 +413,18 @@ impl PartialEq<AstFnCall> for AstFnCall {
 impl Spanned for AstFnCall {
     fn span(&self) -> Span {
         let start = self.fn_name.span().start;
-        let end = self.parens.span().end;
+        let end = self.r_paren.span().end;
         Span { start, end }
     }
 }
 
 impl Parse for AstFnCall {
     fn parse(input: ParseStream) -> Result<Self, ParseError> {
-        let name = input.parse()?;
-        let parens = input.parse()?;
         Ok(AstFnCall {
-            fn_name: name,
-            parens,
+            fn_name: input.parse()?,
+            l_paren: input.parse()?,
             inputs: parse_punctuated_group(input)?,
+            r_paren: input.parse()?,
         })
     }
 }
@@ -458,8 +465,9 @@ impl Parse for VarDecl {
 #[derive(Debug)]
 pub struct FnSig {
     pub fn_name: Ident,
-    pub parens: Paren,
-    pub inputs: Punctuated<Ident, Token![,]>
+    pub l_paren: LParen,
+    pub inputs: Punctuated<Ident, Token![,]>,
+    pub r_paren: RParen,
 }
 
 impl PartialEq<FnSig> for FnSig {
@@ -471,26 +479,20 @@ impl PartialEq<FnSig> for FnSig {
 
 impl Spanned for FnSig {
     fn span(&self) -> Span {
-        let end = self.inputs.try_span()
-            .or_else(|| Some(self.parens.span()))
-            .unwrap()
-            .end;
-
         Span {
-            start: self.fn_name.span().start,
-            end
+            start: self.fn_name.span.start,
+            end: self.r_paren.span.end
         }
     }
 }
 
 impl Parse for FnSig {
     fn parse(input: ParseStream) -> Result<Self, ParseError> {
-        let fn_name = input.parse()?;
-        let parens = input.parse()?;
         Ok(FnSig {
-            fn_name,
-            parens,
+            fn_name: input.parse()?,
+            l_paren: input.parse()?,
             inputs: parse_punctuated_group(input)?,
+            r_paren: input.parse()?,
         })
     }
 }
@@ -499,15 +501,13 @@ pub fn parse_punctuated_group<T: Parse, S: Parse>(input: ParseStream)
 -> Result<Punctuated<T, S>, ParseError> {
     let mut punctuated = Punctuated::new();
     loop {
-        if input.peek::<End>() {
-            input.next_token();
+        if input.peek::<RParen>() {
             break
         }
         let ident = input.parse()?;
         punctuated.push_value(ident);
 
-        if input.peek::<End>() {
-            input.next_token();
+        if input.peek::<RParen>() {
             break
         }
         let comma = input.parse()?;
@@ -554,17 +554,14 @@ impl Parse for FnDecl {
 
 fn parse_ambiguous_fn(input: ParseStream) -> Result<AstStmt, ParseError> {
     let begin = input.save_pos();
-
     let name = input.parse()?;
 
     if input.peek_ignore_group::<Token![=]>() {
-        let parens = input.parse()?;
-
-        let inputs = parse_punctuated_group(input)?;
         let sig = FnSig {
             fn_name: name,
-            parens,
-            inputs
+            l_paren: input.parse()?,
+            inputs: parse_punctuated_group(input)?,
+            r_paren: input.parse()?,
         };
         Ok(FnDecl{
             sig,
@@ -589,18 +586,17 @@ pub trait AstVisit {
 }
 
 mod parsing {
-    use crate::parsing::token::Paren;
-
     use super::*;
 
     pub fn parse_atom(input: ParseStream) -> Result<AstExpr, ParseError> {
+        eprintln!("parse_atom");
         if input.peek::<Token![-]>() {
             input.parse().map(AstExpr::Unary)
-        } else if input.peek::<Ident>() && input.peek2::<Paren>() {
+        } else if input.peek::<Ident>() && input.peek2::<LParen>() {
             input.parse().map(AstExpr::FnCall)
         } else if input.peek::<Literal>() || input.peek::<Ident>() {
             input.parse().map(AstExpr::Value)
-        } else if input.peek::<Paren>() {
+        } else if input.peek::<LParen>() {
             input.parse().map(AstExpr::Group)
         } else {
             Err(input.error("Expected ident, literal, paren, or unary operator"))
@@ -612,15 +608,16 @@ mod parsing {
         mut left: AstExpr,
         base: Precedence
     ) -> Result<AstExpr, ParseError> {
+        eprintln!("parse_expr()");
         loop {
-            if input.peek::<End>() || input.peek::<Token![,]>() {
+            if input.is_eof() || input.peek::<RParen>() || input.peek::<Token![,]>() {
                 break;
             }
 
             let begin = input.save_pos();
 
             // allow for implied multiplication
-            if input.peek::<Ident>() || input.peek::<Paren>() {
+            if input.peek::<Ident>() || input.peek::<LParen>() {
                 let precedence = Precedence::Product;
                 if precedence < base {
                     input.restore_pos(begin);
@@ -642,7 +639,7 @@ mod parsing {
             let op = input.parse()?;
             let precedence = Precedence::of_ast_binop(&op);
 
-            if input.peek::<End>() || input.peek::<Token![,]>() {
+            if input.peek::<RParen>() || input.peek::<Token![,]>() {
                 input.restore_pos(begin);
                 return Err(input.error("Trailing operator"));
             }
@@ -673,6 +670,7 @@ mod parsing {
         input: ParseStream,
         precedence: Precedence,
     ) -> Result<Box<AstExpr>, ParseError> {
+        eprintln!("parse_binop_rhs");
         let mut rhs = parse_atom(input)?;
         loop {
             let begin = input.save_pos();

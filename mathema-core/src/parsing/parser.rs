@@ -1,8 +1,10 @@
 use std::{cell::Cell, error::Error, fmt::Display};
 
+use crate::parsing::token::{LParen, Spanned};
+
 use super::{
     lexer::{LexToken, TokenBuffer},
-    token::{Parse, Span, Spanned, Token}
+    token::{Parse, Span, Token}
 };
 
 type Result<T> = std::result::Result<T, ParseError>;
@@ -97,11 +99,10 @@ impl ParseBuffer {
     }
 
     /// Peek next token while skipping tokens within a group, but not ignoring the group itself.
-    pub fn peek_ignore_delim<T: Token>(&self) -> bool {
-        if let LexToken::Group(_, offset) = self.peek_token() {
+    pub fn peek_ignore_group<T: Token>(&self) -> bool {
+        if self.peek::<LParen>() {
             let begin = self.save_pos();
-            self.pos.update(|pos| pos + offset + 1);
-
+            while !matches!(self.next_token(), LexToken::RParen(..)) {}
             if self.is_eof() {
                 return false
             }
@@ -131,16 +132,6 @@ impl ParseBuffer {
         self.pos.get() == self.src.len() - 1
     }
 
-    pub fn get_span(&self, token: &LexToken) -> Span {
-        match token {
-            LexToken::Literal(literal) => literal.span(),
-            LexToken::Ident(ident) => ident.span(),
-            LexToken::Punct(punct) => punct.span(),
-            LexToken::OpenDelim(delim) => delim.span(),
-            LexToken::CloseDelim(delim) => delim.span()
-        }
-    }
-
     pub fn lookahead(&self) -> Lookahead<'_> {
         Lookahead {
             input: self,
@@ -149,7 +140,7 @@ impl ParseBuffer {
     }
 
     pub fn error(&self, msg: &str) -> ParseError {
-        let span = self.get_span(self.peek_token());
+        let span = self.peek_token().span();
         ParseError { msg: msg.to_string(), span }
     }
 
@@ -173,7 +164,7 @@ impl Lookahead<'_> {
     }
 
     pub fn error(&self) -> ParseError {
-        let span = self.input.get_span(self.input.peek_token());
+        let span = self.input.peek_token().span();
         match self.peeked.len() {
             0 => {
                 if self.input.is_eof() {

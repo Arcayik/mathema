@@ -6,22 +6,56 @@ use super::token::*;
 pub enum LexToken {
     Literal(Literal),
     Ident(Ident),
-    Punct(Punct),
-    OpenDelim(Delim),
-    CloseDelim(Delim)
+
+    Plus(Token![+]),
+    Minus(Token![-]),
+    Star(Token![*]),
+    Slash(Token![/]),
+    Caret(Token![^]),
+    Equals(Token![=]),
+    Comma(Token![,]),
+
+    LParen(LParen),
+    RParen(RParen),
 }
 
 impl std::fmt::Display for LexToken {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let str = match self {
-            LexToken::Literal(_) => Literal::display(),
+            LexToken::Literal(lit) => &lit.num.to_string(),
             LexToken::Ident(i) => i.symbol.as_str(),
-            LexToken::Punct(p) => p.symbol.as_str(),
-            LexToken::OpenDelim(d) => &format!("{:?}", d.kind),
-            LexToken::CloseDelim(d) => &format!("{:?}", d.kind),
+            LexToken::Plus(_) => crate::parsing::token::Plus::display(),
+            LexToken::Minus(_) => crate::parsing::token::Minus::display(),
+            LexToken::Star(_) => crate::parsing::token::Star::display(),
+            LexToken::Slash(_) => crate::parsing::token::Slash::display(),
+            LexToken::Caret(_) => crate::parsing::token::Caret::display(),
+            LexToken::Equals(_) => crate::parsing::token::Equals::display(),
+            LexToken::Comma(_) => crate::parsing::token::Comma::display(),
+            LexToken::LParen(..) => todo!(),
+            LexToken::RParen(..) => todo!(),
 
         };
         write!(f, "{}", str)
+    }
+}
+
+impl Spanned for LexToken {
+    fn span(&self) -> Span {
+        match self {
+            LexToken::Literal(literal) => literal.span(),
+            LexToken::Ident(ident) => ident.span(),
+
+            LexToken::Plus(tok) => tok.span,
+            LexToken::Minus(tok) => tok.span,
+            LexToken::Star(tok) => tok.span,
+            LexToken::Slash(tok) => tok.span,
+            LexToken::Caret(tok) => tok.span,
+            LexToken::Equals(tok) => tok.span,
+            LexToken::Comma(tok) => tok.span,
+
+            LexToken::LParen(tok) => tok.span(),
+            LexToken::RParen(tok) => tok.span(),
+        }
     }
 }
 
@@ -60,6 +94,7 @@ impl Spanned for LexError {
     }
 }
 
+#[derive(Debug)]
 pub struct TokenBuffer(Box<[LexToken]>);
 
 impl TokenBuffer {
@@ -197,7 +232,7 @@ pub fn tokenize(input: &str) -> Result<TokenBuffer, Vec<LexError>> {
     let mut tokens = Vec::new();
 
     while !lexer.is_eof() {
-        if let Some(token) = parse_token(&mut lexer, &mut errors) { // self.lex_token 
+        if let Some(token) = parse_token(&mut lexer, &mut errors) { // self.lex_token
             tokens.push(token);
         }
     }
@@ -206,23 +241,25 @@ pub fn tokenize(input: &str) -> Result<TokenBuffer, Vec<LexError>> {
 }
 
 fn parse_token(lexer: &mut Lexer, errors: &mut Vec<LexError>) -> Option<LexToken> {
-    loop {
+    let result = loop {
         let ch = lexer.peek()?;
+        let idx = lexer.current_position();
+        let span = Span { start: idx, end: idx + 1 };
         match ch {
             ch if ch.is_whitespace() => {
                 lexer.next()
             },
 
-            '+' | '-' | '*' | '/' | '^' | '=' | ',' | '|' => {
-                return Some(lexing::punct(lexer))
-            },
+            '+' => break Some(LexToken::Plus(Plus { span })),
+            '-' => break Some(LexToken::Minus(Minus { span })),
+            '*' => break Some(LexToken::Star(Star { span })),
+            '/' => break Some(LexToken::Slash(Slash { span })),
+            '^' => break Some(LexToken::Caret(Caret { span })),
+            '=' => break Some(LexToken::Equals(Equals { span })),
+            ',' => break Some(LexToken::Comma(Comma { span })),
 
-            '(' => {
-                return Some(lexing::open_delim(lexer))
-            },
-            ')' => {
-                return Some(lexing::close_delim(lexer))
-            },
+            '(' => break Some(LexToken::LParen(LParen { span })),
+            ')' => break Some(LexToken::RParen(RParen { span })),
 
             ch if ch.is_ascii_alphabetic() || ch == '_' => {
                 return Some(lexing::ident(lexer))
@@ -244,27 +281,23 @@ fn parse_token(lexer: &mut Lexer, errors: &mut Vec<LexError>) -> Option<LexToken
                 let span = (idx, idx+1).into();
                 let error = LexError::new(kind, span);
                 errors.push(error);
-                return None
+                break None
             }
         };
-    }
+    };
+
+    lexer.next();
+    result
 }
 
 mod lexing {
     use crate::{
         parsing::{
-            lexer::{Ident, LexError, LexErrorKind, LexToken, Lexer, Punct},
-            token::{Delim, DelimKind, Literal}
+            lexer::{Ident, LexError, LexErrorKind, LexToken, Lexer},
+            token::Literal
         },
         symbol::Symbol
     };
-
-    pub fn punct(lexer: &mut Lexer) -> LexToken {
-        let start = lexer.mark();
-        let ch = lexer.next().expect("calling code must ensure remaining characters exist");
-        let span = lexer.span_from(start);
-        LexToken::Punct(Punct { symbol: Symbol::intern(&ch.to_string()), span })
-    }
 
     pub fn ident(lexer: &mut Lexer) -> LexToken {
         let start = lexer.mark();
@@ -285,27 +318,5 @@ mod lexing {
         } else {
             Err(LexError::new(LexErrorKind::NumParseError, span))
         }
-    }
-
-    pub fn open_delim(lexer: &mut Lexer) -> LexToken {
-        let ch = lexer.next().expect("a delimiter");
-        let idx = lexer.current_position();
-        let kind = match ch {
-            '(' => DelimKind::Parenthesis,
-            '|' => DelimKind::Bar,
-            _ => unreachable!()
-        };
-        LexToken::OpenDelim(Delim { kind, span: (idx, idx+1).into() })
-    }
-
-    pub fn close_delim(lexer: &mut Lexer) -> LexToken {
-        let ch = lexer.next().expect("a delimiter");
-        let idx = lexer.current_position();
-        let kind = match ch {
-            ')' => DelimKind::Parenthesis,
-            '|' => DelimKind::Bar,
-            _ => unreachable!()
-        };
-        LexToken::CloseDelim(Delim { kind, span: (idx, idx+1).into() })
     }
 }

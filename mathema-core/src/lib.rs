@@ -26,10 +26,7 @@ mod tests {
     fn parse(input: &'static str) -> (Context, AlgebraTree) {
         let mut ctxt = Context::default();
 
-        let (tokens, errors) = tokenize(input);
-        if !errors.is_empty() {
-            panic!("tokenize failed");
-        }
+        let tokens = tokenize(input).unwrap();
         let parser = ParseBuffer::new(tokens);
         let expr = parser.parse::<AstExpr>().unwrap();
         let alg = expr_to_algebra(&expr, &mut ctxt.arena);

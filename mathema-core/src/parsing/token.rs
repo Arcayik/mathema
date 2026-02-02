@@ -141,7 +141,7 @@ impl PartialEq<Ident> for Ident {
 
 impl Token for Ident {
     fn peek<'s>(input: ParseStream) -> bool {
-        matches!(input.next_token(), LexToken::Ident(_))
+        matches!(input.peek_token(), LexToken::Ident(_))
     }
 
     fn display() -> &'static str { "ident" }

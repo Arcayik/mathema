@@ -19,6 +19,7 @@ mod tests {
 
     fn parse(input: &str) -> Result<AstExpr, ParseError> {
         let buffer = tokenize(input).unwrap();
+        dbg!(&buffer);
         let parser = ParseBuffer::new(buffer);
         parser.parse()
     }

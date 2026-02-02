@@ -320,3 +320,32 @@ mod lexing {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::{LexToken, tokenize};
+
+    macro_rules! lex {
+        ($input:literal) => {
+            tokenize($input).unwrap()
+        }
+    }
+
+    macro_rules! toks_eq {
+        ($input:literal, [ $($tok:ident),* ]) => {{
+            let buffer = lex!($input);
+            let mut iter = buffer.into_iter();
+            $(
+                assert!(matches!(iter.next().unwrap(), LexToken::$tok(..)));
+            )*
+        }}
+    }
+
+    #[test]
+    fn lexing() {
+        toks_eq!("1 + 1", [Literal, Plus, Literal]);
+        toks_eq!("2*3 + 6/7", [Literal, Star, Literal, Plus, Literal, Slash, Literal]);
+        toks_eq!("(3.14)", [LParen, Literal, RParen]);
+        toks_eq!("f(x,y) = 2x + 3y^2", [Ident, LParen, Ident, Comma, Ident, RParen, Equals, Literal, Ident, Plus, Literal, Ident, Caret, Literal]);
+    }
+}

@@ -129,7 +129,7 @@ impl ParseBuffer {
     }
 
     pub fn is_eof(&self) -> bool {
-        self.pos.get() == self.src.len() - 1
+        self.pos.get() >= self.src.len()
     }
 
     pub fn lookahead(&self) -> Lookahead<'_> {

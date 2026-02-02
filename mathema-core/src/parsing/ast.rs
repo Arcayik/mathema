@@ -331,6 +331,7 @@ impl Spanned for AstGroup {
 
 impl Parse for AstGroup {
     fn parse(input: ParseStream) -> Result<Self, ParseError> {
+        eprintln!("parsing Group");
         if input.peek::<LParen>() {
             let group = AstGroup {
                 delim_kind: DelimKind::Parenthesis,
@@ -553,6 +554,7 @@ impl Parse for FnDecl {
 }
 
 fn parse_ambiguous_fn(input: ParseStream) -> Result<AstStmt, ParseError> {
+    eprintln!("parse_ambiguous_fn");
     let begin = input.save_pos();
     let name = input.parse()?;
 
@@ -589,16 +591,22 @@ mod parsing {
     use super::*;
 
     pub fn parse_atom(input: ParseStream) -> Result<AstExpr, ParseError> {
-        eprintln!("parse_atom");
+        eprint!("parse_atom: ");
         if input.peek::<Token![-]>() {
+            eprintln!("peeked '-'");
             input.parse().map(AstExpr::Unary)
         } else if input.peek::<Ident>() && input.peek2::<LParen>() {
+            eprintln!("peeked Ident and Paren");
             input.parse().map(AstExpr::FnCall)
         } else if input.peek::<Literal>() || input.peek::<Ident>() {
+            eprintln!("peeked Literal or Ident");
             input.parse().map(AstExpr::Value)
         } else if input.peek::<LParen>() {
+            eprintln!("peeked LParen");
             input.parse().map(AstExpr::Group)
         } else {
+            eprintln!("peeked Something Else! {}", input.peek_token());
+            input.debug();
             Err(input.error("Expected ident, literal, paren, or unary operator"))
         }
     }

@@ -125,7 +125,9 @@ impl ParseBuffer {
         if let Some(tok) = self.peek_token() {
             tok.span()
         } else if let Some(tok) = self.last_token() {
-            tok.span()
+            // get the span just after the last one
+            let after = tok.span().end;
+            Span { start: after, end: after + 1 }
         } else {
             Span { start: 0, end: 1 }
         }

@@ -103,7 +103,6 @@ pub fn call_variable(ctxt: &Context, name: Symbol) -> Result<f64, VarError> {
 
 pub fn mathema_parse(ctxt: &mut Context, input: &str) -> Result<Outcome, MathemaError> {
     let buffer = tokenize(input).map_err(MathemaError::Lexer)?;
-    dbg!(&buffer);
 
     let parsebuffer = ParseBuffer::new(buffer);
     let stmt = parsebuffer.parse::<AstStmt>()

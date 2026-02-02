@@ -9,17 +9,13 @@ pub mod punctuated;
 mod tests {
     use crate::{
         parsing::{
-            ast::{AstBinary, AstExpr, AstGroup, AstUnary, AstValue, BinOp, UnaryOp},
-            lexer::tokenize,
-            parser::{ParseBuffer, ParseError},
-            token::{Caret, DelimKind, Ident, Literal, Minus, Plus, Span, Spanned, Star}
+            ast::{AstBinary, AstExpr, AstFnCall, AstGroup, AstUnary, AstValue, BinOp, UnaryOp}, lexer::tokenize, parser::{ParseBuffer, ParseError}, punctuated::Punctuated, token::{Caret, DelimKind, Ident, Literal, Minus, Plus, Span, Spanned, Star}
         },
         symbol::Symbol
     };
 
     fn parse(input: &str) -> Result<AstExpr, ParseError> {
         let buffer = tokenize(input).unwrap();
-        dbg!(&buffer);
         let parser = ParseBuffer::new(buffer);
         parser.parse()
     }
@@ -90,6 +86,15 @@ mod tests {
         AstGroup { delim_kind: DelimKind::Parenthesis, expr: Box::new(expr) }.into()
     }
 
+    fn func(name: &'static str) -> AstExpr {
+        AstFnCall {
+            fn_name: Ident { symbol: Symbol::intern(name), span: EMPTY },
+            l_paren: super::token::LParen { span: EMPTY },
+            inputs: Punctuated::new(),
+            r_paren: super::token::RParen { span: EMPTY },
+        }.into()
+    }
+
     #[test]
     fn values() {
         assert_eq!(parse("1").unwrap(), lit(1.0).into());
@@ -114,6 +119,12 @@ mod tests {
 
         let expected = add( lit(1.2), mul( lit(3.4), exp( lit(5.6), lit(7.89) ) ) ).into();
         assert_eq!(parse("1.2 + 3.40 * 5.6 ^ 7.89").unwrap(), expected);
+
+        let expected = add( lit(20.0), impl_mul(lit(40.0), var("x")) );
+        assert_eq!(parse("20+40x").unwrap(), expected);
+
+        let expected = add( lit(3.0), impl_mul( lit(4.0), func("f") ) );
+        assert_eq!(parse("3+4f(x)").unwrap(), expected);
     }
 
     #[test]
@@ -135,16 +146,17 @@ mod tests {
     #[test]
     fn parens() {
         assert_eq!(parse("(59.9)").unwrap(), group(lit(59.9)));
-        // assert_eq!(parse("1 + (1)").unwrap(), add( lit(1.0), group(lit(1.0)) ));
-        // let expected = group(mul(
-        //         group(add(
-        //                 lit(1.0),
-        //                 lit(1.0)
-        //         )),
-        //         lit(30.0)
-        // ));
-        // assert_eq!(parse("((1+1) * 30)").unwrap(), expected);
-        // assert!(fails_at("()", (0, 2)));
+        assert_eq!(parse("1 + (1)").unwrap(), add( lit(1.0), group(lit(1.0)) ));
+        let expected = group(mul(
+                group(add(
+                        lit(1.0),
+                        lit(1.0)
+                )),
+                lit(30.0)
+        ));
+        assert_eq!(parse("((1+1) * 30)").unwrap(), expected);
+        assert!(fails_at("()", (1, 2)));
+        // TODO: trailing delimiter checks
         // assert!(fails_at("(2*4) )", (6, 7)));
     }
 

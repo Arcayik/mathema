@@ -56,25 +56,13 @@ impl Parse for AstStmt {
     }
 }
 
-#[derive(PartialEq)]
+#[derive(Debug, PartialEq)]
 pub enum AstExpr {
     Value(AstValue),
     Binary(AstBinary),
     Unary(AstUnary),
     Group(AstGroup),
     FnCall(AstFnCall),
-}
-
-impl std::fmt::Debug for AstExpr {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Self::Value(t) => write!(f, "{:?}", t),
-            Self::Binary(t) => write!(f, "{:?}", t),
-            Self::Unary(t) => write!(f, "{:?}", t),
-            Self::Group(t) => write!(f, "{:?}", t),
-            Self::FnCall(t) => write!(f, "{:?}", t),
-        }
-    }
 }
 
 impl From<AstValue> for AstExpr {
@@ -121,7 +109,6 @@ impl Spanned for AstExpr {
 
 impl Parse for AstExpr {
     fn parse(input: ParseStream) -> Result<Self, ParseError> {
-        eprintln!("parsing AstExpr");
         let lhs = parsing::parse_atom(input)?;
         parsing::parse_expr(input, lhs, Precedence::MIN)
     }
@@ -153,16 +140,12 @@ impl Spanned for AstValue {
 
 impl Parse for AstValue {
     fn parse(input: ParseStream) -> Result<Self, ParseError> {
-        eprintln!("parsing AstValue");
         let mut lookahead = input.lookahead();
         if lookahead.peek::<Literal>() {
-            eprintln!("> peek Literal");
             input.parse().map(AstValue::Literal)
         } else if lookahead.peek::<Ident>() {
-            eprintln!("> peek Ident");
             input.parse().map(AstValue::Ident)
         } else {
-            eprintln!("> lookahead error");
             Err(lookahead.error())
         }
     }
@@ -196,7 +179,6 @@ impl Spanned for AstBinary {
 
 impl Parse for AstBinary {
     fn parse(input: ParseStream) -> Result<Self, ParseError> {
-        eprintln!("parsing AstBinary");
         Ok(AstBinary {
             lhs: Box::new(input.parse()?),
             op: input.parse()?,
@@ -319,7 +301,9 @@ pub struct AstGroup {
 
 impl std::fmt::Debug for AstGroup {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "({:?} {:?})", self.delim_kind, self.expr)
+        match self.delim_kind {
+            DelimKind::Parenthesis => write!(f, "({:?})", self.expr)
+        }
     }
 }
 
@@ -331,7 +315,6 @@ impl Spanned for AstGroup {
 
 impl Parse for AstGroup {
     fn parse(input: ParseStream) -> Result<Self, ParseError> {
-        eprintln!("parsing Group");
         if input.peek::<LParen>() {
             input.next_token();
             let group = AstGroup {
@@ -555,7 +538,6 @@ impl Parse for FnDecl {
 }
 
 fn parse_ambiguous_fn(input: ParseStream) -> Result<AstStmt, ParseError> {
-    eprintln!("parse_ambiguous_fn");
     let begin = input.save_pos();
     let name = input.parse()?;
 
@@ -592,21 +574,15 @@ mod parsing {
     use super::*;
 
     pub fn parse_atom(input: ParseStream) -> Result<AstExpr, ParseError> {
-        eprint!("parse_atom: ");
         if input.peek::<Token![-]>() {
-            eprintln!("peeked '-'");
             input.parse().map(AstExpr::Unary)
         } else if input.peek::<Ident>() && input.peek2::<LParen>() {
-            eprintln!("peeked Ident and Paren");
             input.parse().map(AstExpr::FnCall)
         } else if input.peek::<Literal>() || input.peek::<Ident>() {
-            eprintln!("peeked Literal or Ident");
             input.parse().map(AstExpr::Value)
         } else if input.peek::<LParen>() {
-            eprintln!("peeked LParen");
             input.parse().map(AstExpr::Group)
         } else {
-            eprintln!("peeked Something Else! {:?}", input.peek_token());
             input.debug();
             Err(input.error("Expected ident, literal, paren, or unary operator"))
         }
@@ -617,20 +593,23 @@ mod parsing {
         mut left: AstExpr,
         base: Precedence
     ) -> Result<AstExpr, ParseError> {
-        eprintln!("parse_expr()");
         loop {
+            dbg!(&left);
+            eprintln!("parse_expr()");
+
             if input.is_eof() || input.peek::<RParen>() || input.peek::<Token![,]>() {
                 break;
             }
 
             let begin = input.save_pos();
 
-            // allow for implied multiplication
+            // implied multiplication
+            // TODO: make sure var times (expr) is not ambiguous with fn calls
             if input.peek::<Ident>() || input.peek::<LParen>() {
-                eprintln!("> implicit multiplication");
+                eprintln!(":: implied multiplication");
                 let precedence = Precedence::Product;
                 if precedence < base {
-                    eprintln!("> Prec::Product < base, going back");
+                    eprintln!(":::: precedence < base");
                     input.restore_pos(begin);
                     break;
                 } else {
@@ -681,7 +660,6 @@ mod parsing {
         input: ParseStream,
         precedence: Precedence,
     ) -> Result<Box<AstExpr>, ParseError> {
-        eprintln!("parse_binop_rhs");
         let mut rhs = parse_atom(input)?;
         loop {
             let begin = input.save_pos();

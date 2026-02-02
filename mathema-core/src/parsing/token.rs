@@ -54,7 +54,7 @@ macro_rules! define_tokens {
             impl Parse for $name {
                 fn parse(input: ParseStream) -> Result<Self, ParseError> {
 
-                    if let $crate::parsing::lexer::LexToken::$name(token) = input.next_token() {
+                    if let Some($crate::parsing::lexer::LexToken::$name(token)) = input.next_token() {
                         Ok(Self { span: token.span })
                     } else {
                         Err(input.error(&format!("Expected {}", stringify!($name))))
@@ -64,7 +64,7 @@ macro_rules! define_tokens {
 
             impl Token for $name {
                 fn peek(input: ParseStream) -> bool {
-                    matches!(input.peek_token(), $crate::parsing::lexer::LexToken::$name(..))
+                    matches!(input.peek_token(), Some($crate::parsing::lexer::LexToken::$name(..)))
                 }
 
                 fn display() -> &'static str { $token }
@@ -109,7 +109,7 @@ impl PartialEq<Literal> for Literal {
 
 impl Token for Literal {
     fn peek<'s>(input: ParseStream) -> bool {
-        matches!(input.peek_token(), LexToken::Literal(_))
+        matches!(input.peek_token(), Some(LexToken::Literal(_)))
     }
 
     fn display() -> &'static str { "literal" }
@@ -117,7 +117,7 @@ impl Token for Literal {
 
 impl Parse for Literal {
     fn parse(input: ParseStream) -> Result<Self, ParseError> {
-        if let LexToken::Literal(literal) = input.next_token() {
+        if let Some(LexToken::Literal(literal)) = input.next_token() {
             Ok(literal.clone())
         } else {
             Err(input.error("Expected literal"))
@@ -141,7 +141,7 @@ impl PartialEq<Ident> for Ident {
 
 impl Token for Ident {
     fn peek<'s>(input: ParseStream) -> bool {
-        matches!(input.peek_token(), LexToken::Ident(_))
+        matches!(input.peek_token(), Some(LexToken::Ident(_)))
     }
 
     fn display() -> &'static str { "ident" }
@@ -149,7 +149,7 @@ impl Token for Ident {
 
 impl Parse for Ident {
     fn parse(input: ParseStream) -> Result<Self, ParseError> {
-        if let LexToken::Ident(ident) = input.next_token() {
+        if let Some(LexToken::Ident(ident)) = input.next_token() {
             Ok(ident.clone())
         } else {
             Err(input.error("Expected ident"))

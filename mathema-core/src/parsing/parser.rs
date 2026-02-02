@@ -55,31 +55,20 @@ impl ParseBuffer {
         ParseBuffer { src, pos: Cell::new(0) }
     }
 
-    pub fn peek_token(&self) -> &LexToken {
-        &self.src[self.pos.get()]
+    pub fn peek_token(&self) -> Option<&LexToken> {
+        self.src.get(self.pos.get())
     }
 
-    pub fn debug(&self) {
-        let line = self.src.iter()
-            .enumerate()
-            .map(|(i,t)| {
-                if i == self.pos.get() {
-                    format!("{{{}}} ->", t)
-                } else {
-                    t.to_string()
-                }
-            })
-            .collect::<Vec<_>>()
-            .join(" ");
-        println!("{}", line);
-    }
-
-    pub fn next_token(&self) -> &LexToken {
+    pub fn next_token(&self) -> Option<&LexToken> {
         let token = self.peek_token();
-        if !self.is_eof() {
+        if self.pos() <= self.src.len() - 1 {
             self.pos.update(|pos| pos + 1);
         }
         token
+    }
+
+    fn last_token(&self) -> Option<&LexToken> {
+        self.src.last()
     }
 
     pub fn parse<T: Parse>(&self) -> Result<T> {
@@ -102,7 +91,7 @@ impl ParseBuffer {
     pub fn peek_ignore_group<T: Token>(&self) -> bool {
         if self.peek::<LParen>() {
             let begin = self.save_pos();
-            while !matches!(self.next_token(), LexToken::RParen(..)) {}
+            while !matches!(self.next_token(), Some(LexToken::RParen(..))) {}
             if self.is_eof() {
                 return false
             }
@@ -129,7 +118,17 @@ impl ParseBuffer {
     }
 
     pub fn is_eof(&self) -> bool {
-        self.pos.get() >= self.src.len()
+        self.peek_token().is_none()
+    }
+
+    fn current_span(&self) -> Span {
+        if let Some(tok) = self.peek_token() {
+            tok.span()
+        } else if let Some(tok) = self.last_token() {
+            tok.span()
+        } else {
+            Span { start: 0, end: 1 }
+        }
     }
 
     pub fn lookahead(&self) -> Lookahead<'_> {
@@ -140,12 +139,23 @@ impl ParseBuffer {
     }
 
     pub fn error(&self, msg: &str) -> ParseError {
-        let span = self.peek_token().span();
+        let span = self.current_span();
         ParseError { msg: msg.to_string(), span }
     }
 
-    pub fn spanned_error(&self, msg: &str, span: Span) -> ParseError {
-        ParseError { msg: msg.to_string(), span }
+    pub fn debug(&self) {
+        let line = self.src.iter()
+            .enumerate()
+            .map(|(i,t)| {
+                if i == self.pos.get() {
+                    format!("{{{}}} ->", t)
+                } else {
+                    t.to_string()
+                }
+            })
+            .collect::<Vec<_>>()
+            .join(" ");
+        println!("{}", line);
     }
 }
 
@@ -164,7 +174,7 @@ impl Lookahead<'_> {
     }
 
     pub fn error(&self) -> ParseError {
-        let span = self.input.peek_token().span();
+        let span = self.input.current_span();
         match self.peeked.len() {
             0 => {
                 if self.input.is_eof() {

@@ -333,11 +333,12 @@ impl Parse for AstGroup {
     fn parse(input: ParseStream) -> Result<Self, ParseError> {
         eprintln!("parsing Group");
         if input.peek::<LParen>() {
+            input.next_token();
             let group = AstGroup {
                 delim_kind: DelimKind::Parenthesis,
                 expr: Box::new(input.parse()?)
             };
-            // TODO: NOT checked by lexer
+            // TODO: Parenthesis check
             if input.peek::<RParen>() {
                 input.next_token();
             }
@@ -605,7 +606,7 @@ mod parsing {
             eprintln!("peeked LParen");
             input.parse().map(AstExpr::Group)
         } else {
-            eprintln!("peeked Something Else! {}", input.peek_token());
+            eprintln!("peeked Something Else! {:?}", input.peek_token());
             input.debug();
             Err(input.error("Expected ident, literal, paren, or unary operator"))
         }
@@ -626,8 +627,10 @@ mod parsing {
 
             // allow for implied multiplication
             if input.peek::<Ident>() || input.peek::<LParen>() {
+                eprintln!("> implicit multiplication");
                 let precedence = Precedence::Product;
                 if precedence < base {
+                    eprintln!("> Prec::Product < base, going back");
                     input.restore_pos(begin);
                     break;
                 } else {

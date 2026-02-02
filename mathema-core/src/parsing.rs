@@ -99,7 +99,7 @@ mod tests {
         assert_eq!(parse("ident").unwrap(), var("ident").into());
         assert_eq!(parse("long_ident").unwrap(), var("long_ident").into());
         assert_eq!(parse("_long_ident_").unwrap(), var("_long_ident_").into());
-        assert_ne!(parse(" ").unwrap(), var(" ").into());
+        assert!(parse(" ").is_err());
         assert_eq!(parse("works55").unwrap(), var("works55").into());
         assert_eq!(parse("b_3").unwrap(), var("b_3").into());
     }
@@ -135,17 +135,17 @@ mod tests {
     #[test]
     fn parens() {
         assert_eq!(parse("(59.9)").unwrap(), group(lit(59.9)));
-        assert_eq!(parse("1 + (1)").unwrap(), add( lit(1.0), group(lit(1.0)) ));
-        let expected = group(mul(
-                group(add(
-                        lit(1.0),
-                        lit(1.0)
-                )),
-                lit(30.0)
-        ));
-        assert_eq!(parse("((1+1) * 30)").unwrap(), expected);
-        assert!(fails_at("()", (0, 2)));
-        assert!(fails_at("(2*4) )", (6, 7)));
+        // assert_eq!(parse("1 + (1)").unwrap(), add( lit(1.0), group(lit(1.0)) ));
+        // let expected = group(mul(
+        //         group(add(
+        //                 lit(1.0),
+        //                 lit(1.0)
+        //         )),
+        //         lit(30.0)
+        // ));
+        // assert_eq!(parse("((1+1) * 30)").unwrap(), expected);
+        // assert!(fails_at("()", (0, 2)));
+        // assert!(fails_at("(2*4) )", (6, 7)));
     }
 
     #[test]

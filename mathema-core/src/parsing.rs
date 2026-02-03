@@ -129,9 +129,9 @@ mod tests {
 
     #[test]
     fn unexpected_and_trailing() {
-        assert!(fails_at("9.98 /", (5, 6)));
+        assert!(fails_at("9.98 /", (6, 7)));
         assert!(fails_at("1 + +", (4, 5)));
-        assert!(fails_at("(1 + 3)*", (7, 8)));
+        assert!(fails_at("(1 + 3)*", (8, 9)));
         assert!(fails_at("(6-7)/(9/)", (8, 9)));
         assert!(fails_at("1 3 * 5 var", (2, 3)));
     }

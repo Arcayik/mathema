@@ -571,6 +571,8 @@ pub trait AstVisit {
 }
 
 mod parsing {
+    use crate::parsing::lexer::LexToken;
+
     use super::*;
 
     pub fn parse_atom(input: ParseStream) -> Result<AstExpr, ParseError> {
@@ -594,9 +596,6 @@ mod parsing {
         base: Precedence
     ) -> Result<AstExpr, ParseError> {
         loop {
-            dbg!(&left);
-            eprintln!("parse_expr()");
-
             if input.is_eof() || input.peek::<RParen>() || input.peek::<Token![,]>() {
                 break;
             }
@@ -604,35 +603,38 @@ mod parsing {
             let begin = input.save_pos();
 
             // implied multiplication
-            // TODO: make sure var times (expr) is not ambiguous with fn calls
-            if input.peek::<Ident>() || input.peek::<LParen>() {
-                eprintln!(":: implied multiplication");
-                let precedence = Precedence::Product;
-                if precedence < base {
-                    eprintln!(":::: precedence < base");
-                    input.restore_pos(begin);
-                    break;
+            // if input.peek::<Ident>() || input.peek::<LParen>() {
+            //     let precedence = Precedence::Product;
+            //     if precedence < base {
+            //         input.restore_pos(begin);
+            //         break;
+            //     } else {
+            //         left = AstBinary {
+            //             lhs: Box::new(left),
+            //             op: BinOp::Mul(None),
+            //             rhs: parse_binop_rhs(input, precedence)?,
+            //         }.into();
+            //     }
+            //     continue
+            // }
+
+            let (op, precedence) = if !peek_binop(input) {
+                if can_be_impl_mul(input, &left) {
+                    (BinOp::Mul(None), Precedence::Product)
                 } else {
-                    left = AstBinary {
-                        lhs: Box::new(left),
-                        op: BinOp::Mul(None),
-                        rhs: parse_binop_rhs(input, precedence)?,
-                    }.into();
+                    return Err(input.error("Unexpected token, can't be implicitly multiplied"));
                 }
-                continue
-            }
+            } else {
+                let op = input.parse()?;
+                let precedence = Precedence::of_ast_binop(&op);
+                (op, precedence)
+            };
 
-            if !peek_binop(input) {
-                return Err(input.error("Unexpected token"));
-            }
-
-            let op = input.parse()?;
-            let precedence = Precedence::of_ast_binop(&op);
-
-            if input.peek::<RParen>() || input.peek::<Token![,]>() {
-                input.restore_pos(begin);
-                return Err(input.error("Trailing operator"));
-            }
+            // can_be_impl_mul already checks for this
+            // if input.peek::<RParen>() || input.peek::<Token![,]>() {
+            //     input.restore_pos(begin);
+            //     return Err(input.error("Trailing operator"));
+            // }
 
             if precedence < base {
                 input.restore_pos(begin);
@@ -676,6 +678,46 @@ mod parsing {
             }
         }
         Ok(Box::new(rhs))
+    }
+
+    fn can_be_impl_mul(input: ParseStream, left: &AstExpr) -> bool {
+        let tok = if let Some(t) = input.peek_token() {
+            t
+        } else {
+            return false;
+        };
+
+        match (left, tok) {
+            // 2x, 2 x, 3 f(...), 3f(...)
+            (AstExpr::Value(AstValue::Literal(_)), LexToken::Ident(_)) => true,
+            // 3(...), 3 (...)
+            (AstExpr::Value(AstValue::Literal(_)), LexToken::LParen(_)) => true,
+
+            // x 4
+            (AstExpr::Value(AstValue::Ident(_)), LexToken::Literal(_)) => true,
+            // x x, x f(...)
+            (AstExpr::Value(AstValue::Ident(_)), LexToken::Ident(_)) => true,
+
+            // -2x, -2 x, -2f(...), -2 f(...)
+            (AstExpr::Unary(_), LexToken::Ident(_)) => true,
+            // -2(...), -2 (...)
+            (AstExpr::Unary(_), LexToken::LParen(_)) => true,
+
+            // 5 * 5x, 1*1 x
+            (AstExpr::Binary(AstBinary { op: BinOp::Mul(_), .. }), LexToken::LParen(_)) => true,
+
+            // (...)x, (...) x, (...)f(...), (...) f(...)
+            (AstExpr::Group(_), LexToken::Ident(_)) => true,
+            // (...)(...), (...) (...)
+            (AstExpr::Group(_), LexToken::LParen(_)) => true,
+
+            // f(...)x, f(...) x, f(...)g(...), f(...) g(...)
+            (AstExpr::FnCall(_), LexToken::Ident(_)) => true,
+            // f(...)(...), f(...) (...)
+            (AstExpr::FnCall(_), LexToken::LParen(_)) => true,
+
+            _ => false,
+        }
     }
 
     fn peek_precedence(input: ParseStream) -> Precedence {

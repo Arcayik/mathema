@@ -1,8 +1,10 @@
 use std::{cell::Cell, error::Error, fmt::Display};
 
+use crate::parsing::token::{LParen, Spanned};
+
 use super::{
     lexer::{LexToken, TokenBuffer},
-    token::{Parse, Span, Spanned, Token}
+    token::{Parse, Span, Token}
 };
 
 type Result<T> = std::result::Result<T, ParseError>;
@@ -53,31 +55,20 @@ impl ParseBuffer {
         ParseBuffer { src, pos: Cell::new(0) }
     }
 
-    pub fn peek_token(&self) -> &LexToken {
-        &self.src[self.pos.get()]
+    pub fn peek_token(&self) -> Option<&LexToken> {
+        self.src.get(self.pos.get())
     }
 
-    pub fn debug(&self) {
-        let line = self.src.iter()
-            .enumerate()
-            .map(|(i,t)| {
-                if i == self.pos.get() {
-                    format!("{{{}}} ->", t)
-                } else {
-                    t.to_string()
-                }
-            })
-            .collect::<Vec<_>>()
-            .join(" ");
-        println!("{}", line);
-    }
-
-    pub fn next_token(&self) -> &LexToken {
+    pub fn next_token(&self) -> Option<&LexToken> {
         let token = self.peek_token();
-        if !self.is_eof() {
+        if self.pos() < self.src.len() {
             self.pos.update(|pos| pos + 1);
         }
         token
+    }
+
+    fn last_token(&self) -> Option<&LexToken> {
+        self.src.last()
     }
 
     pub fn parse<T: Parse>(&self) -> Result<T> {
@@ -98,10 +89,9 @@ impl ParseBuffer {
 
     /// Peek next token while skipping tokens within a group, but not ignoring the group itself.
     pub fn peek_ignore_group<T: Token>(&self) -> bool {
-        if let LexToken::Group(_, offset) = self.peek_token() {
+        if self.peek::<LParen>() {
             let begin = self.save_pos();
-            self.pos.update(|pos| pos + offset + 1);
-
+            while !matches!(self.next_token(), Some(LexToken::RParen(..))) {}
             if self.is_eof() {
                 return false
             }
@@ -128,20 +118,18 @@ impl ParseBuffer {
     }
 
     pub fn is_eof(&self) -> bool {
-        self.pos.get() == self.src.len() - 1
+        self.peek_token().is_none()
     }
 
-    pub fn get_span(&self, token: &LexToken) -> Span {
-        match token {
-            LexToken::Literal(literal) => literal.span(),
-            LexToken::Ident(ident) => ident.span(),
-            LexToken::Punct(punct) => punct.span(),
-            LexToken::Group(group, _offset) => group.span(),
-            LexToken::End(offset) => {
-                let group_pos = self.pos.get() - offset.unsigned_abs();
-                let group = &self.src[group_pos];
-                self.get_span(group)
-            },
+    fn current_span(&self) -> Span {
+        if let Some(tok) = self.peek_token() {
+            tok.span()
+        } else if let Some(tok) = self.last_token() {
+            // get the span just after the last one
+            let after = tok.span().end;
+            Span { start: after, end: after + 1 }
+        } else {
+            Span { start: 0, end: 1 }
         }
     }
 
@@ -153,12 +141,23 @@ impl ParseBuffer {
     }
 
     pub fn error(&self, msg: &str) -> ParseError {
-        let span = self.get_span(self.peek_token());
+        let span = self.current_span();
         ParseError { msg: msg.to_string(), span }
     }
 
-    pub fn spanned_error(&self, msg: &str, span: Span) -> ParseError {
-        ParseError { msg: msg.to_string(), span }
+    pub fn debug(&self) {
+        let line = self.src.iter()
+            .enumerate()
+            .map(|(i,t)| {
+                if i == self.pos.get() {
+                    format!("{{{}}} ->", t)
+                } else {
+                    t.to_string()
+                }
+            })
+            .collect::<Vec<_>>()
+            .join(" ");
+        println!("{}", line);
     }
 }
 
@@ -177,7 +176,7 @@ impl Lookahead<'_> {
     }
 
     pub fn error(&self) -> ParseError {
-        let span = self.input.get_span(self.input.peek_token());
+        let span = self.input.current_span();
         match self.peeked.len() {
             0 => {
                 if self.input.is_eof() {

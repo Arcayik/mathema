@@ -61,6 +61,7 @@ impl ErrorDisplay for FuncError {
             },
             FuncError::BadArgs(off) => {
                 let many_few = if *off > 0 { "many" } else { "few" };
+                let off = off.abs();
                 format!("in func: {off} too {many_few} args")
             },
             FuncError::NotDefined(name) => {

@@ -102,10 +102,7 @@ pub fn call_variable(ctxt: &Context, name: Symbol) -> Result<f64, VarError> {
 }
 
 pub fn mathema_parse(ctxt: &mut Context, input: &str) -> Result<Outcome, MathemaError> {
-    let (buffer, errors) = tokenize(input);
-    if !errors.is_empty() {
-        return Err(MathemaError::Lexer(errors))
-    }
+    let buffer = tokenize(input).map_err(MathemaError::Lexer)?;
 
     let parsebuffer = ParseBuffer::new(buffer);
     let stmt = parsebuffer.parse::<AstStmt>()

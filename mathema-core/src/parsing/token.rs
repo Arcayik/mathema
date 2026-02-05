@@ -41,7 +41,7 @@ macro_rules! impl_spanned {
     }
 }
 
-macro_rules! define_punctuation {
+macro_rules! define_tokens {
     ($($token:literal pub struct $name:ident)*) => {
         $(
             #[derive(Debug, Clone, Copy)]
@@ -53,67 +53,21 @@ macro_rules! define_punctuation {
 
             impl Parse for $name {
                 fn parse(input: ParseStream) -> Result<Self, ParseError> {
-                    if let $crate::parsing::lexer::LexToken::Punct(punct) = input.next_token() {
-                        if punct.symbol.to_string() == $token {
-                            Ok(Self { span: punct.span })
-                        } else {
-                            Err(input.error(&format!("Expected {}", stringify!($name))))
-                        }
+
+                    if let Some($crate::parsing::lexer::LexToken::$name(token)) = input.next_token() {
+                        Ok(Self { span: token.span })
                     } else {
-                        Err(input.error("Expected punct"))
+                        Err(input.error(&format!("Expected {}", stringify!($name))))
                     }
                 }
             }
 
             impl Token for $name {
                 fn peek(input: ParseStream) -> bool {
-                    if let $crate::parsing::lexer::LexToken::Punct(punct) = input.peek_token() {
-                        punct.symbol.to_string() == $token
-                    } else {
-                        false
-                    }
+                    matches!(input.peek_token(), Some($crate::parsing::lexer::LexToken::$name(..)))
                 }
 
                 fn display() -> &'static str { $token }
-            }
-        )*
-    };
-}
-
-macro_rules! define_delimiters {
-    ($($variant:ident pub struct $name:ident $string:literal)*) => {
-        $(
-            #[allow(unused)]
-            #[derive(Debug)]
-            pub struct $name {
-                span: $crate::parsing::token::Span
-            }
-
-            impl_spanned! { $name }
-
-            impl Parse for $name {
-                fn parse(input: ParseStream) -> Result<Self, ParseError> {
-                    if let $crate::parsing::lexer::LexToken::Group(group, _) = input.next_token() {
-                        if matches!(group.delim, Delimiter::$variant) {
-                            Ok(Self { span: group.span() })
-                        } else {
-                            Err(input.error(&format!("Expected {}", $string)))
-                        }
-                    } else {
-                        Err(input.error("Expected group"))
-                    }
-                }
-            }
-
-            impl Token for $name {
-                fn peek<'s>(input: ParseStream) -> bool {
-                    match input.peek_token() {
-                        $crate::parsing::lexer::LexToken::Group(g, _) => matches!(g.delim, Delimiter::$variant),
-                        _ => false
-                    }
-                }
-
-                fn display() -> &'static str { $string }
             }
         )*
     };
@@ -129,7 +83,7 @@ macro_rules! Token {
     [,] => { $crate::parsing::token::Comma };
 }
 
-define_punctuation! {
+define_tokens! {
     "+"     pub struct Plus
     "-"     pub struct Minus
     "*"     pub struct Star
@@ -137,12 +91,8 @@ define_punctuation! {
     "^"     pub struct Caret
     "="     pub struct Equals
     ","     pub struct Comma
-}
-
-define_delimiters! {
-    Parenthesis pub struct Paren    "paren"
-    Brace       pub struct Brace    "brace"
-    Bracket     pub struct Bracket  "bracket"
+    "("     pub struct LParen
+    ")"     pub struct RParen
 }
 
 #[derive(Debug, Clone)]
@@ -159,7 +109,7 @@ impl PartialEq<Literal> for Literal {
 
 impl Token for Literal {
     fn peek<'s>(input: ParseStream) -> bool {
-        matches!(input.peek_token(), LexToken::Literal(_))
+        matches!(input.peek_token(), Some(LexToken::Literal(_)))
     }
 
     fn display() -> &'static str { "literal" }
@@ -167,7 +117,7 @@ impl Token for Literal {
 
 impl Parse for Literal {
     fn parse(input: ParseStream) -> Result<Self, ParseError> {
-        if let LexToken::Literal(literal) = input.next_token() {
+        if let Some(LexToken::Literal(literal)) = input.next_token() {
             Ok(literal.clone())
         } else {
             Err(input.error("Expected literal"))
@@ -191,7 +141,7 @@ impl PartialEq<Ident> for Ident {
 
 impl Token for Ident {
     fn peek<'s>(input: ParseStream) -> bool {
-        matches!(input.peek_token(), LexToken::Ident(_))
+        matches!(input.peek_token(), Some(LexToken::Ident(_)))
     }
 
     fn display() -> &'static str { "ident" }
@@ -199,7 +149,7 @@ impl Token for Ident {
 
 impl Parse for Ident {
     fn parse(input: ParseStream) -> Result<Self, ParseError> {
-        if let LexToken::Ident(ident) = input.next_token() {
+        if let Some(LexToken::Ident(ident)) = input.next_token() {
             Ok(ident.clone())
         } else {
             Err(input.error("Expected ident"))
@@ -209,39 +159,17 @@ impl Parse for Ident {
 
 impl_spanned! { Ident }
 
-#[derive(Debug, Clone)]
-pub struct Punct {
-    pub symbol: Symbol,
-    pub span: Span,
-}
-
-impl_spanned! { Punct }
-
 #[derive(Debug, Clone, Copy, PartialEq)]
-pub enum Delimiter {
+pub enum DelimKind {
     /// ( ... )
     Parenthesis,
-    /// { ... }
-    Brace,
-    /// \[ ... \]
-    Bracket,
 }
 
 #[derive(Debug, Clone)]
-pub struct Group {
-    pub delim: Delimiter,
+pub struct Delim {
+    pub kind: DelimKind,
     pub span: Span
 }
 
-impl_spanned! { Group }
+impl_spanned! { Delim }
 
-#[derive(Debug, Clone)]
-pub struct End;
-
-impl Token for End {
-    fn peek(input: ParseStream) -> bool {
-        matches!(input.peek_token(), LexToken::End(..))
-    }
-
-    fn display() -> &'static str { "end" }
-}

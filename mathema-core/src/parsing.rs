@@ -9,9 +9,12 @@ pub mod punctuated;
 mod tests {
     use crate::{
         parsing::{
-            ast::{AstBinary, AstExpr, AstFnCall, AstGroup, AstUnary, AstValue, BinOp, UnaryOp}, lexer::tokenize, parser::{ParseBuffer, ParseError}, punctuated::Punctuated, token::{Caret, DelimKind, Ident, Literal, Minus, Plus, Span, Spanned, Star}
+            token::{Caret, DelimKind, Ident, Literal, Minus, Plus, Span, Spanned, Star},
+            lexer::tokenize,
+            parser::{ParseBuffer, ParseError},
+            ast::{AstBinary, AstExpr, AstFnCall, AstGroup, AstUnary, AstValue, BinOp, UnaryOp},
         },
-        symbol::Symbol
+        symbol::Symbol,
     };
 
     fn parse(input: &str) -> Result<AstExpr, ParseError> {
@@ -86,13 +89,12 @@ mod tests {
         AstGroup { delim_kind: DelimKind::Parenthesis, expr: Box::new(expr) }.into()
     }
 
-    fn func(name: &'static str) -> AstExpr {
-        AstFnCall {
-            fn_name: Ident { symbol: Symbol::intern(name), span: EMPTY },
-            l_paren: super::token::LParen { span: EMPTY },
-            inputs: Punctuated::new(),
-            r_paren: super::token::RParen { span: EMPTY },
-        }.into()
+    fn func(sig: &'static str) -> AstExpr {
+        let buffer = tokenize(sig).unwrap();
+        let parser = ParseBuffer::new(buffer);
+        let fn_call: AstFnCall = parser.parse().unwrap();
+
+        return fn_call.into();
     }
 
     #[test]
@@ -123,7 +125,7 @@ mod tests {
         let expected = add( lit(20.0), impl_mul(lit(40.0), var("x")) );
         assert_eq!(parse("20+40x").unwrap(), expected);
 
-        let expected = add( lit(3.0), impl_mul( lit(4.0), func("f") ) );
+        let expected = add( lit(3.0), impl_mul( lit(4.0), func("f(x)") ) );
         assert_eq!(parse("3+4f(x)").unwrap(), expected);
     }
 
@@ -132,7 +134,7 @@ mod tests {
         assert!(fails_at("9.98 /", (6, 7)));
         assert!(fails_at("1 + +", (4, 5)));
         assert!(fails_at("(1 + 3)*", (8, 9)));
-        assert!(fails_at("(6-7)/(9/)", (8, 9)));
+        assert!(fails_at("(6-7)/(9/)", (9, 10)));
         assert!(fails_at("1 3 * 5 var", (2, 3)));
     }
 
@@ -162,15 +164,15 @@ mod tests {
 
     #[test]
     fn implied_multiplication() {
-        let expected = impl_mul(
+        let expected = mul(
+            lit(1.0),
             impl_mul(
-                mul(
-                    lit(1.0),
-                    lit(3.0),
-                ),
-                var("x"),
-            ),
-            var("y")
+                lit(3.0),
+                impl_mul(
+                    var("x"),
+                    var("y")
+                )
+            )
         );
         assert_eq!(parse("1 * 3 x y").unwrap(), expected);
         assert_eq!(parse("3(4.2x)").unwrap(), impl_mul(lit(3.0), group(impl_mul(lit(4.2), var("x")))) )

@@ -61,7 +61,7 @@ impl ParseBuffer {
 
     pub fn next_token(&self) -> Option<&LexToken> {
         let token = self.peek_token();
-        if self.pos() <= self.src.len() - 1 {
+        if self.pos() < self.src.len() {
             self.pos.update(|pos| pos + 1);
         }
         token

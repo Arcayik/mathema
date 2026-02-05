@@ -31,9 +31,9 @@ impl std::fmt::Display for LexToken {
             LexToken::Caret(_) => crate::parsing::token::Caret::display(),
             LexToken::Equals(_) => crate::parsing::token::Equals::display(),
             LexToken::Comma(_) => crate::parsing::token::Comma::display(),
-            LexToken::LParen(..) => "(",
-            LexToken::RParen(..) => ")",
 
+            LexToken::LParen(..) => crate::parsing::token::LParen::display(),
+            LexToken::RParen(..) => crate::parsing::token::RParen::display(),
         };
         write!(f, "{}", str)
     }

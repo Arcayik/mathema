@@ -111,7 +111,7 @@ pub fn mathema_parse(ctxt: &mut Context, input: &str) -> Result<Outcome, Mathema
     match stmt {
         AstStmt::Expr(expr) => {
             let alg = expr_to_algebra(&expr, &mut ctxt.arena );
-            println!("{}", alg.visit(ctxt, Display));
+            print!("{} = ", alg.visit(ctxt, Display));
             match alg.visit(ctxt, Evaluate) {
                 Ok(ans) => {
                     ctxt.set_variable(Symbol::intern("ans"), alg);

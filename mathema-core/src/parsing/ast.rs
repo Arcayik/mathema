@@ -585,7 +585,6 @@ mod parsing {
         } else if input.peek::<LParen>() {
             input.parse().map(AstExpr::Group)
         } else {
-            input.debug();
             Err(input.error("Expected ident, literal, paren, or unary operator"))
         }
     }
@@ -607,7 +606,7 @@ mod parsing {
                 if peek_impl_mul(input, &left) {
                     (BinOp::Mul(None), Precedence::Product)
                 } else {
-                    return Err(input.error("Unexpected token, can't be implicitly multiplied"));
+                    return Err(input.error("Unexpected token"));
                 }
             } else {
                 let op = input.parse()?;

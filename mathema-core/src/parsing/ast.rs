@@ -602,22 +602,6 @@ mod parsing {
 
             let begin = input.save_pos();
 
-            // implied multiplication
-            // if peek_impl_mul(input) {
-            //     let precedence = Precedence::Product;
-            //     if precedence < base {
-            //         input.restore_pos(begin);
-            //         break;
-            //     } else {
-            //         left = AstBinary {
-            //             lhs: Box::new(left),
-            //             op: BinOp::Mul(None),
-            //             rhs: parse_binop_rhs(input, precedence)?,
-            //         }.into();
-            //     }
-            //     continue
-            // }
-
             let (op, precedence) = if !peek_binop(input) {
                 // eof has been checked
                 if peek_impl_mul(input, &left) {
@@ -630,12 +614,6 @@ mod parsing {
                 let precedence = Precedence::of_ast_binop(&op);
                 (op, precedence)
             };
-
-            // can_be_impl_mul already checks for this
-            // if input.peek::<RParen>() || input.peek::<Token![,]>() {
-            //     input.restore_pos(begin);
-            //     return Err(input.error("Trailing operator"));
-            // }
 
             if precedence < base {
                 input.restore_pos(begin);

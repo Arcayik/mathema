@@ -100,61 +100,88 @@ fn algexpr_to_string(arena: &Arena, node: &AlgExpr) -> String {
             format!("{}{}", op, arg)
         }
         AlgExpr::Binary { left, op, right } => {
-            let left_arg = arena.strings[left].clone();
-            let right_arg = arena.strings[right].clone();
-
-            // precedence and parentheses
-            let node_l = &arena[*left];
-            let left_arg = if Precedence::of_alg(node_l) < Precedence::of_alg_binop(op) {
-                format!("({})", left_arg)
-            } else {
-                left_arg
-            };
-
-            let node_r = &arena[*right];
-            let right_arg = if Precedence::of_alg(node_r) < Precedence::of_alg_binop(op) {
-                format!("({})", right_arg)
-            } else {
-                right_arg
-            };
-
-            // TODO: implicit multiplication
-            // num var, num (expr), var var, (expr) num, (expr) var,
-            if *op != AlgBinOp::Mul {
-                return format!("{} {} {}", left_arg, op, right_arg)
-            }
-
-            let implicit = match node_l {
-                AlgExpr::Literal(..) | AlgExpr::Unary {..} => match node_r {
-                    AlgExpr::Literal(..) | AlgExpr::Unary {..} => false,
-                    _ => true
-                },
-
-                AlgExpr::Ident(..) => match node_r {
-                    AlgExpr::Literal(..) | AlgExpr::Unary {..} => false,
-                    _ => true
-                },
-
-                AlgExpr::FnCall {..} => match node_r {
-                     AlgExpr::Literal(..) | AlgExpr::Unary {..} => false,
-                     _ => true
-                }
-
-                _ => false
-            };
-
-            if implicit {
-                format!("{}{}", left_arg, right_arg)
-            } else {
-                format!("{} {} {}", left_arg, op, right_arg)
-            }
+            binary_to_string(arena, left, op, right)
         }
         AlgExpr::FnCall { name, args } => {
             let args_string = args.iter()
                 .map(|id| arena.strings[id].clone())
                 .collect::<Vec<String>>()
-                .join(", ");
+                .join(",");
             format!("{}({})", name, args_string)
         }
     }
+}
+
+fn binary_to_string(arena: &Arena, left: &NodeId, op: &AlgBinOp, right: &NodeId) -> String {
+    let left_arg = arena.strings[left].clone();
+    let right_arg = arena.strings[right].clone();
+
+    // precedence and parentheses
+    let node_l = &arena[*left];
+    let left_arg = if Precedence::of_alg(node_l) < Precedence::of_alg_binop(op) {
+        format!("({})", left_arg)
+    } else {
+        left_arg
+    };
+
+    let node_r = &arena[*right];
+    let mut right_arg = if Precedence::of_alg(node_r) < Precedence::of_alg_binop(op) {
+        format!("({})", right_arg)
+    } else {
+        right_arg
+    };
+
+    let implicit = *op == AlgBinOp::Mul && match (node_l, node_r) {
+        // 2x, 2 x, 3 f(...), 3f(...)
+        (AlgExpr::Literal(_), AlgExpr::Ident(_)) => true,
+        (AlgExpr::Literal(_), AlgExpr::FnCall{..}) => true,
+        // 3(...), 3 (...)
+        (AlgExpr::Literal(_), AlgExpr::Binary { op, .. }) => {
+            Precedence::of_alg_binop(op) != Precedence::Product
+        }
+        // 4(-1), 4 (-1)
+        (AlgExpr::Literal(_), AlgExpr::Unary{..}) => {
+            right_arg = format!("({})", right_arg);
+            true
+        },
+
+        // x 4
+        (AlgExpr::Ident(_), AlgExpr::Literal(_)) => true,
+        // x x, x f(...)
+        (AlgExpr::Ident(_), AlgExpr::Ident(_)) => true,
+        (AlgExpr::Ident(_), AlgExpr::FnCall{..}) => true,
+
+        // -2x, -2 x, -2f(...), -2 f(...)
+        (AlgExpr::Unary{..}, AlgExpr::Ident(_)) => true,
+        (AlgExpr::Unary{..}, AlgExpr::FnCall{..}) => true,
+        // -2(...), -2 (...)
+        (AlgExpr::Unary{..}, AlgExpr::Binary { op, .. }) => {
+            Precedence::of_alg_binop(op) < Precedence::Product
+        },
+
+        // f(...)x, f(...) x, f(...)g(...), f(...) g(...)
+        (AlgExpr::FnCall{..}, AlgExpr::Ident(_)) => true,
+        (AlgExpr::FnCall{..}, AlgExpr::FnCall{..}) => true,
+
+        // f(...)(...), f(...) (...)
+        (AlgExpr::FnCall{..}, AlgExpr::Binary { op, .. }) => {
+            if Precedence::of_alg_binop(op) <= Precedence::Product {
+                right_arg = format!("({})", right_arg);
+            }
+            true
+        },
+
+        _ => false
+    };
+
+    if implicit {
+        format!("{}{}", left_arg, right_arg)
+    } else {
+        if matches!(op, AlgBinOp::Exp) {
+            format!("{}{}{}", left_arg, op, right_arg)
+        } else {
+            format!("{} {} {}", left_arg, op, right_arg)
+        }
+    }
+
 }

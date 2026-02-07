@@ -176,12 +176,10 @@ fn binary_to_string(arena: &Arena, left: &NodeId, op: &AlgBinOp, right: &NodeId)
 
     if implicit {
         format!("{}{}", left_arg, right_arg)
+    } else if matches!(op, AlgBinOp::Exp) {
+        format!("{}{}{}", left_arg, op, right_arg)
     } else {
-        if matches!(op, AlgBinOp::Exp) {
-            format!("{}{}{}", left_arg, op, right_arg)
-        } else {
-            format!("{} {} {}", left_arg, op, right_arg)
-        }
+        format!("{} {} {}", left_arg, op, right_arg)
     }
-
 }
+

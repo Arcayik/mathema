@@ -145,6 +145,7 @@ impl ParseBuffer {
         ParseError { msg: msg.to_string(), span }
     }
 
+    #[cfg(test)]
     pub fn debug(&self) {
         let line = self.src.iter()
             .enumerate()
